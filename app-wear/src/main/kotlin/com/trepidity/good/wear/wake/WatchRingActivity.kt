@@ -119,6 +119,16 @@ class WatchRingActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        visible = true
+    }
+
+    override fun onPause() {
+        visible = false
+        super.onPause()
+    }
+
     private fun dismiss() {
         startService(WakeStageService.actionIntent(this, WakeStageService.ACTION_DISMISS))
         finish()
@@ -126,11 +136,15 @@ class WatchRingActivity : ComponentActivity() {
 
     private fun now(): String = WatchFormat.clock(this, System.currentTimeMillis())
 
-    private companion object {
-        val AMBER = Color(0xFFFFB38A)
+    companion object {
+        /** Whether the ringing screen is in front; the ring service brings it back when it isn't. */
+        @Volatile var visible = false
+            private set
+
+        private val AMBER = Color(0xFFFFB38A)
 
         /** Black glass, amber segments, unlit segments barely there: nothing bright at night. */
-        val RING = LcdPalette(
+        private val RING = LcdPalette(
             panel = Color.Black,
             ink = AMBER,
             ghost = AMBER.copy(alpha = 0.05f),

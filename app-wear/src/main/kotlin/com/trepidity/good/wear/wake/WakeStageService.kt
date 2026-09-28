@@ -50,6 +50,7 @@ data class WatchRingUi(val instanceId: String, val label: String, val fireAt: In
 class WakeStageService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var timeline: Job? = null
+    private var screenKeeper: Job? = null
     private var entry: ScheduleEntry? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var tone: ToneRamp
@@ -102,7 +103,15 @@ class WakeStageService : Service() {
         // Wear OS doesn't launch full-screen intents, so open the ringing screen directly. Android allows this from
         // the background only with the overlay grant (CHK → SCR, README); without it the alarm still buzzes and
         // sounds, and the ongoing notification opens the screen when tapped.
-        runCatching { startActivity(Intent(this, WatchRingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        openRingScreen()
+        // Wear OS returns to the watch face ~10 s after the screen was last touched and hides the ringing screen
+        // behind it (seen on the 2R). While ringing, bring it back so the hold-to-stop target is always there.
+        screenKeeper = scope.launch {
+            while (true) {
+                delay(SCREEN_CHECK_MS)
+                if (!WatchRingActivity.visible) openRingScreen()
+            }
+        }
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "good:watch-wake")
             .apply { acquire(WakePlanner.holdMs(now, fireAt, e.profile).coerceAtMost(HARD_CAP_MS)) }
@@ -177,7 +186,13 @@ class WakeStageService : Service() {
         timeline = scope.launch { delay(40_000); finish() }
     }
 
+    private fun openRingScreen() {
+        runCatching { startActivity(Intent(this, WatchRingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+
     private fun finish(stopService: Boolean = true) {
+        screenKeeper?.cancel()
+        screenKeeper = null
         timeline?.cancel()
         timeline = null
         tone.stop()
@@ -239,6 +254,7 @@ class WakeStageService : Service() {
         private const val TAG = "GoodWakeStage"
         private const val NOTIFICATION_ID = 43
         private const val HARD_CAP_MS = 65 * 60_000L
+        private const val SCREEN_CHECK_MS = 3_000L
 
         const val ACTION_START = "com.trepidity.good.wear.START"
         const val ACTION_DISMISS = "com.trepidity.good.wear.DISMISS"
