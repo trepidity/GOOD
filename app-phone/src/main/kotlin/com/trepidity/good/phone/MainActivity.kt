@@ -1,6 +1,7 @@
 package com.trepidity.good.phone
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,6 +36,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent { Instrument(model) }
+        // Without notifications the full-screen alarm can't appear over the lock screen: ask up front, once.
+        if (savedInstanceState == null && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         lifecycleScope.launch {
             model.effects.collect { effect ->
                 when (effect) {

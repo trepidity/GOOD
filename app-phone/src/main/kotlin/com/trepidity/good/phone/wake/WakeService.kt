@@ -95,7 +95,7 @@ class WakeService : Service() {
     private fun start(instanceId: String?, preview: Boolean) {
         val e = instanceId?.let { ScheduleStore.find(this, it) }
         if (e == null || e.instance.state.isTerminal) {
-            if (entry == null) stopSelf()
+            if (entry == null) quietStop()
             return
         }
         if (entry?.instance?.id == e.instance.id && timeline?.isActive == true) return // backup alarm while ringing
@@ -110,7 +110,7 @@ class WakeService : Service() {
         if (!now.isBefore(silenceAt)) {
             EventLog.log(this, "MISSED", "${e.instance.id} started after its silence time")
             InstanceEvents.record(this, e.instance.copy(state = InstanceState.SILENCED, currentStage = null))
-            if (entry == null) stopSelf()
+            if (entry == null) quietStop()
             return
         }
 
@@ -120,6 +120,9 @@ class WakeService : Service() {
         val provisional = plan(e, fireAt, factor, watchAvailable = false)
         ui.value = ringUi(e, fireAt, provisional, preview)
         goForeground(e)
+        // With GOOD itself open, Android shows the full-screen intent only as a heads-up; open the ringing screen
+        // directly. (From the background Android refuses this quietly, and the full-screen intent does the job.)
+        runCatching { startActivity(Intent(this, RingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "good:wake")
             .apply { acquire(WakePlanner.holdMs(now, fireAt, e.profile).coerceAtMost(HARD_CAP_MS)) }
@@ -245,21 +248,37 @@ class WakeService : Service() {
         if (ms > 0) delay(ms)
     }
 
-    private fun goForeground(e: ScheduleEntry) {
+    /**
+     * Started with startForegroundService(), Android kills the app unless startForeground() follows, even when
+     * there is nothing to ring (dismissed on the watch, edited, long past). A plain notice, gone at once.
+     */
+    private fun quietStop() {
+        val n = NotificationCompat.Builder(this, GoodApplication.CHANNEL_STATUS)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("GOOD")
+            .build()
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
+        finish()
+    }
+
+    /** The one full-screen post per occurrence: an update to an existing notification may not launch it. */
+    private fun goForeground(e: ScheduleEntry?) {
         val fullScreen = PendingIntent.getActivity(
             this, 1, Intent(this, RingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         // No notification actions on purpose: there is no snooze, and dismiss is the 2-second hold on the ringing screen.
-        val notification: Notification = NotificationCompat.Builder(this, GoodApplication.CHANNEL_ALARM)
+        // A preview opens RingActivity itself, so it gets a quiet notice instead of a heads-up over the sunrise.
+        val notification: Notification = NotificationCompat.Builder(this, if (preview) GoodApplication.CHANNEL_STATUS else GoodApplication.CHANNEL_ALARM)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(e.label.ifBlank { "GOOD alarm" })
+            .setContentTitle(e?.label?.ifBlank { null } ?: "GOOD alarm")
             .setContentText("Waking you gently · hold STOP to dismiss")
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
-            .setFullScreenIntent(fullScreen, true)
+            .apply { if (!preview) setFullScreenIntent(fullScreen, true) }
+            .setSilent(preview)
             .setContentIntent(fullScreen)
             .build()
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)

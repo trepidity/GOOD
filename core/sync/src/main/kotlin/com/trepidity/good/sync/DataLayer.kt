@@ -61,8 +61,6 @@ object ScheduleMerge {
      */
     fun merge(incoming: ScheduleSnapshot, local: ScheduleSnapshot?): ScheduleSnapshot {
         val closedHere = local?.entries.orEmpty().filter { it.instance.state.isTerminal }.associateBy { it.instance.id }
-        return incoming.copy(entries = incoming.entries.map { e ->
-            if (e.instance.state.isTerminal) e else closedHere[e.instance.id]?.let { e.copy(instance = it.instance) } ?: e
-        })
+        return incoming.copy(entries = incoming.entries.map { e -> closedHere[e.instance.id]?.let { e.copy(instance = it.instance) } ?: e })
     }
 }

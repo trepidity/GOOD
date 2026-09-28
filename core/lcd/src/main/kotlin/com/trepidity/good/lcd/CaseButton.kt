@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
@@ -73,6 +74,7 @@ fun CaseButton(
     onHoldProgress: ((Float) -> Unit)? = null,
     repeatOnHold: Boolean = false,
     contentDescription: String = label,
+    faceHeight: Dp = 28.dp,
 ) {
     val view = LocalView.current
     val click by rememberUpdatedState(onClick)
@@ -95,7 +97,7 @@ fun CaseButton(
                 coroutineScope {
                     val scope = this
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        val down = awaitFirstDown(requireUnconsumed = false)
                         val downAt = SystemClock.uptimeMillis()
                         pressed = true
                         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -135,7 +137,9 @@ fun CaseButton(
                         job?.cancel()
                         pressed = false
                         if (hasLong && !held) holdProgress?.invoke(0f)
-                        val quick = SystemClock.uptimeMillis() - downAt < viewConfiguration.longPressTimeoutMillis
+                        // Judge tap vs. hold by the events' own timestamps: on a slow frame, processing the release
+                        // late must not turn a tap into an abandoned hold.
+                        val quick = up == null || up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis
                         if (up != null && !held && (!hasLong || quick)) {
                             up.consume()
                             click()
@@ -151,7 +155,7 @@ fun CaseButton(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(28.dp)
+                .height(faceHeight)
                 .offset(y = if (pressed) 1.dp else 0.dp)
                 .clip(pill)
                 .background(

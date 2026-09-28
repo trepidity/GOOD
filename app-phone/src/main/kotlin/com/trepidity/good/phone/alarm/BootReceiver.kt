@@ -35,7 +35,7 @@ class BootReceiver : BroadcastReceiver() {
         fun registerFromSnapshot(context: Context) {
             val now = System.currentTimeMillis()
             ScheduleStore.load(context)?.entries
-                ?.filter { !it.instance.state.isTerminal && it.instance.scheduledAtEpochMs > now - 20 * 60_000 }
+                ?.filter { it.instance.alarmId >= 0 && !it.instance.state.isTerminal && it.instance.scheduledAtEpochMs > now - 20 * 60_000 }
                 ?.forEach { AlarmScheduler.schedule(context, it) }
         }
     }

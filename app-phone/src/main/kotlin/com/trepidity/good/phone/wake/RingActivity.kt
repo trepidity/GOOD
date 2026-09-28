@@ -1,6 +1,7 @@
 package com.trepidity.good.phone.wake
 
 import android.os.Bundle
+import android.text.format.DateFormat
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -101,7 +102,8 @@ class RingActivity : ComponentActivity() {
                 CaseButton(
                     "HOLD STOP", palette,
                     onClick = {},
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    modifier = Modifier.fillMaxWidth().height(132.dp),
+                    faceHeight = 96.dp,
                     onLongClick = ::dismiss,
                     onHoldProgress = { held = it },
                     contentDescription = "Stop alarm. Press and hold for two seconds.",
@@ -126,5 +128,8 @@ class RingActivity : ComponentActivity() {
         return (Duration.between(start, t).toMillis().toFloat() / total).coerceIn(0f, 1f)
     }
 
-    private fun now(): String = LocalTime.now().let { "${it.hour}:${"%02d".format(it.minute)}" }
+    private fun now(): String = LocalTime.now().let {
+        val h = if (DateFormat.is24HourFormat(this)) it.hour else (it.hour % 12).let { h -> if (h == 0) 12 else h }
+        "$h:${"%02d".format(it.minute)}"
+    }
 }

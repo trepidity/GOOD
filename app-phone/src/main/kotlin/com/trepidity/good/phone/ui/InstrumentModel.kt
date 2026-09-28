@@ -130,11 +130,15 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
     // ---- The five case buttons --------------------------------------------------------------------------
 
     fun mode(forward: Boolean = true) {
+        // While a field flashes, MODE only leaves set mode (without saving), like a real watch.
+        if (_state.value.let { it.almEdit != null || it.slpEdit != null || it.proDraft != null }) {
+            _state.update { it.copy(almEdit = null, slpEdit = null, proDraft = null) }
+            return
+        }
         _state.update {
             val modes = Mode.entries
             val next = modes[(it.mode.ordinal + if (forward) 1 else modes.size - 1) % modes.size]
-            // MODE leaves any edit without saving, like a real watch's MODE button.
-            it.copy(mode = next, almEdit = null, slpEdit = null, proDraft = null)
+            it.copy(mode = next)
         }
     }
 
@@ -288,7 +292,8 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
     private fun proStep(delta: Int, s: UiState) {
         val draft = s.proDraft
         if (draft == null) {
-            _state.update { it.copy(proRow = Math.floorMod(it.proRow + delta, PRO_ROWS)) }
+            // Lists read top to bottom: ▼ moves down a row, like CHK and LAP.
+            _state.update { it.copy(proRow = Math.floorMod(it.proRow - delta, PRO_ROWS)) }
             return
         }
         if (s.proRow == 0) {
@@ -305,7 +310,7 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
     fun preview(profile: WakeProfile) {
         val fireAt = Instant.now().plusSeconds(30)
         val entry = ScheduleEntry(
-            AlarmInstance(InstanceIds.of(PREVIEW_CHANNEL, fireAt), PREVIEW_CHANNEL, fireAt.toEpochMilli()), profile, SoundTarget.PHONE, "PREVIEW",
+            AlarmInstance(InstanceIds.of(PREVIEW_CHANNEL, fireAt), PREVIEW_CHANNEL, fireAt.toEpochMilli()), profile, SoundTarget.PHONE, profile.name,
         )
         val snap = ScheduleStore.load(ctx) ?: ScheduleSnapshot(0, 0, emptyList())
         ScheduleStore.save(ctx, snap.copy(entries = snap.entries.filterNot { it.instance.alarmId == PREVIEW_CHANNEL } + entry))

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Build
+import android.provider.Settings
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import com.trepidity.good.sync.DataLayerPaths
@@ -22,6 +23,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 enum class CheckItem(val code: String, val speech: String) {
     EXA("EXA", "Exact alarms"),
     FSI("FSI", "Full-screen alarm"),
+    SCR("SCR", "Ringing screen over the watch face"),
     NTF("NTF", "Notifications"),
     BODY("BODY", "Wrist sensor"),
     LINK("LINK", "Phone link"),
@@ -48,6 +50,11 @@ object WatchChecks {
         mapOf(
             CheckItem.EXA to perm(WatchAlarmScheduler.canScheduleExact(context)),
             CheckItem.FSI to perm(canFullScreen(context)),
+            // Wear OS doesn't launch full-screen intents, so the ring service opens its screen itself, which
+            // needs the overlay grant: adb shell appops set com.trepidity.good SYSTEM_ALERT_WINDOW allow
+            CheckItem.SCR to Settings.canDrawOverlays(context).let { ok ->
+                CheckResult(ok, if (ok) "" else "ADB GRANT", if (ok) "OK" else "Not granted. Run the appops command in the README")
+            },
             CheckItem.NTF to perm(granted(context, Manifest.permission.POST_NOTIFICATIONS)),
             CheckItem.BODY to when {
                 !offBody -> CheckResult(false, "NO SENSOR", "No off-body sensor")

@@ -53,3 +53,18 @@ The milestone table stands. Because the devices aren't attached overnight, M1–
 - `AlarmScheduler` request codes use `hashCode()*2+slot`, which can collide. Per-channel codes (`alarmId*2+slot`) are stable and let `FLAG_UPDATE_CURRENT` replace a channel's previous instance.
 - `WatchListenerService` answers `/health` with a constant "worn". It now reads the off-body sensor.
 - `ScheduleStore` and `WatchScheduleStore` used credential-encrypted SharedPreferences (see R1).
+
+## Found while running the build on emulators (Android 16 phone, Wear OS 5 round)
+
+Both apps were installed on emulators and driven through every mode, a 60-second preview and a real watch alarm registered through the device-protected snapshot. These findings came from that run and are fixed.
+
+| # | Sev | Finding | Remediation |
+|---|---|---|---|
+| E1 | Critical | **Wear OS doesn't launch full-screen intents.** A real watch alarm fired on time (+0.2 s) and buzzed, but the hold-to-stop screen never appeared: SysUI received the full-screen intent and ignored it, even for an alerting notification. Direct starts from the service, the alarm receiver or an activity-type alarm-clock PendingIntent are all refused as background activity launches on Wear OS 5. | The watch declares `SYSTEM_ALERT_WINDOW`, which exempts GOOD from the background-launch block; the ring service opens `WatchRingActivity` itself. It's granted once at setup with `adb shell appops set com.trepidity.good SYSTEM_ALERT_WINDOW allow` (README), and watch CHK → SCR shows whether it's in place. Without it the alarm still buzzes and sounds, and tapping the notification opens the screen. Spec: Platform constraints. |
+| E2 | Critical | **The ring service could crash the app.** `AlarmReceiver` starts the service with `startForegroundService()`; when there was nothing to ring (the occurrence was dismissed on the other device, edited or long past), the service stopped without calling `startForeground()`, and Android killed the app. Reproduced after a reinstall re-delivered a boot broadcast. | Every non-ringing path calls `startForeground()` with a plain notice, then stops (`quietStop`), on the phone and the watch. The ringing path still posts the full-screen notification exactly once, because an update may not re-launch it. |
+| E3 | High | Boot re-registration included finished 60-s previews, which is what triggered E2. | Previews use channel −1 and are skipped on boot. They never reach the watch or Room. |
+| E4 | High | With GOOD itself open, Android shows an alarm's full-screen intent only as a heads-up, so the preview (and an alarm firing while you're in the app) showed no ringing screen. | The ring service also opens the ringing screen directly, which Android allows while the app is in the foreground. |
+| E5 | High | Without notification permission the full-screen alarm can't appear at all, and a fresh install doesn't have it. | GOOD asks on first launch; CHK → NTF still flags it. |
+| E6 | Medium | `CaseButton` judged tap vs. hold by when it *processed* the release. On a slow frame, a tap on SET was taken as an abandoned hold and ignored. | It now uses the touch events' own timestamps. |
+| E7 | Medium | MODE during an edit both cancelled the edit and moved to the next mode, so one press did two things. | MODE while a field is flashing only leaves set mode, like a real watch. |
+| E8 | Low | PRO ▼ went up the list; the ring clock ignored the 12/24-hour setting; "PREVIEW" appeared twice; the STOP button face was a thin dark pill; the panel left two-thirds empty on a tall phone. | All fixed; STOP is now a 96 dp face on a 132 dp target. |

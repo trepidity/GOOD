@@ -157,6 +157,7 @@ fun WatchApp(resumes: Int, onExit: () -> Unit) {
             Mode.CHK -> when (chkItem) {
                 CheckItem.EXA -> openSettings(context, Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
                 CheckItem.FSI -> openSettings(context, Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+                CheckItem.SCR -> openSettings(context, Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
                 CheckItem.NTF -> request(Manifest.permission.POST_NOTIFICATIONS)
                 CheckItem.ACT -> request(Manifest.permission.ACTIVITY_RECOGNITION)
                 CheckItem.BODY -> checkRuns++

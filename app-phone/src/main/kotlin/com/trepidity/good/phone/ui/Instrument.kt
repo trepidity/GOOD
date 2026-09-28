@@ -95,8 +95,7 @@ fun Instrument(model: InstrumentModel) {
                 palette,
                 Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .aspectRatio(0.78f)
+                    .weight(1f)
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragStart = { drag = 0f },
@@ -104,7 +103,7 @@ fun Instrument(model: InstrumentModel) {
                         ) { _, dx -> drag += dx }
                     },
             ) {
-                Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     ModeBar(s.mode, palette)
                     when (s.mode) {
                         Mode.ALM -> AlmFace(model, s, palette, now)
@@ -116,7 +115,7 @@ fun Instrument(model: InstrumentModel) {
                     if (holdProgress > 0f) SegmentBar(holdProgress, 20, palette, Modifier.fillMaxWidth().height(10.dp))
                 }
             }
-            Spacer(Modifier.weight(0.01f).heightIn(min = 14.dp))
+            Spacer(Modifier.height(18.dp))
             CaseButton("LIGHT", palette, onClick = model::light, modifier = Modifier.width(150.dp))
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
@@ -267,8 +266,10 @@ private fun ColumnScope.SlpFace(model: InstrumentModel, s: UiState, palette: Lcd
     val goal = s.sleepGoalMin.coerceAtLeast(1)
     val byDate = nights.associateBy { it.wakeDate }
     val today = LocalDate.now()
+    Spacer(Modifier.weight(0.3f))
     LcdBarGraph((6 downTo 0).map { d -> byDate[today.minusDays(d.toLong())]?.let { (it.totalSleepMin.toFloat() / goal).coerceIn(0f, 1f) } }, palette,
-        Modifier.fillMaxWidth().height(56.dp))
+        Modifier.fillMaxWidth().weight(1f).heightIn(max = 180.dp), levels = 12)
+    Spacer(Modifier.weight(0.3f))
     val (avg7, avg30, debt) = model.sleepAverages()
     if (s.banner != null) Line(s.banner, palette, 22.dp) else {
         Line("7D ${hm(avg7)} 30D ${hm(avg30)}", palette, 16.dp)
@@ -294,6 +295,7 @@ private fun ColumnScope.ProFace(model: InstrumentModel, s: UiState, palette: Lcd
     } else {
         SegmentText("P${s.proProfile + 1}", 80.dp, palette)
     }
+    Spacer(Modifier.weight(1f))
     ProfileRow.entries.forEachIndexed { i, r ->
         val label = when (r) {
             ProfileRow.LIGHT -> "INT 1 LIGHT %d:00"
@@ -302,7 +304,7 @@ private fun ColumnScope.ProFace(model: InstrumentModel, s: UiState, palette: Lcd
             ProfileRow.FULL -> "INT 4 FULL +%d:00"
             ProfileRow.SIL -> "SIL %d"
         }.format(r.get(p))
-        Line((if (s.proRow == i + 1) "*" else " ") + label, palette, 15.dp)
+        Line((if (s.proRow == i + 1) "*" else " ") + label, palette, 18.dp)
     }
     if (s.banner != null) Line(s.banner, palette, 22.dp)
 }
@@ -325,7 +327,7 @@ private fun ColumnScope.ChkFace(model: InstrumentModel, s: UiState, palette: Lcd
     }
     Line(item?.id?.title ?: if (action == ChkAction.TST) "Test alarm +3 min" else "Export JSON", palette, 16.dp)
     Line(item?.detail ?: if (action == ChkAction.TST) "Both devices ring" else "Pick a file", palette, 14.dp)
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.weight(1f))
     // A segment-test strip: every item at a glance, failing ones blinking.
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         s.checks.forEachIndexed { i, c ->

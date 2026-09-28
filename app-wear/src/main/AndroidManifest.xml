@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Wear OS ignores full-screen intents and blocks background activity starts; this lets the ring service
+         open the hold-to-stop screen itself. Granted once at setup: see README (adb shell appops ...). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".WearApplication"

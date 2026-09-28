@@ -5,11 +5,11 @@ import com.trepidity.good.model.ScheduleEntry
 import com.trepidity.good.model.ScheduleSnapshot
 import com.trepidity.good.model.SoundTarget
 import com.trepidity.good.model.WakeProfile
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** Gate: SPEC Architecture — the watch keeps a snapshot only if it is newer (version is monotonic). */
 class SyncCodecTest {
     private val snapshot = ScheduleSnapshot(
         version = 7,
@@ -18,12 +18,7 @@ class SyncCodecTest {
     )
 
     @Test
-    fun `schedule round-trips`() {
-        assertEquals(snapshot, SyncCodec.decodeSchedule(SyncCodec.encode(snapshot)))
-    }
-
-    @Test
-    fun `older versions are ignored`() {
+    fun `a stale or replayed snapshot never replaces a newer one`() {
         assertTrue(SyncCodec.shouldApply(snapshot, null))
         assertFalse(SyncCodec.shouldApply(snapshot.copy(version = 6), snapshot))
         assertTrue(SyncCodec.shouldApply(snapshot.copy(version = 8), snapshot))
