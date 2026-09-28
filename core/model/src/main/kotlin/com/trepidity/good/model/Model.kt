@@ -17,6 +17,10 @@ enum class SoundTarget { AUTO, PHONE, WATCH, BOTH }
 @Serializable
 enum class StageType { LIGHT, HAPTIC, SOUND, ESCALATE }
 
+/** The audible pattern. CHIME = soft two-note chime; CLASSIC = the four-beep digital-watch alarm. Both ramp from ~5%. */
+@Serializable
+enum class Tone { CHIME, CLASSIC }
+
 /**
  * One step of a wake profile.
  *
@@ -102,6 +106,7 @@ data class Alarm(
     val profileId: String = WakeProfile.GENTLE.id,
     val soundTarget: SoundTarget = SoundTarget.AUTO,
     val skipNextDate: String? = null,
+    val tone: Tone = Tone.CHIME,
 )
 
 @Serializable
@@ -135,12 +140,41 @@ data class ScheduleEntry(
     val profile: WakeProfile,
     val soundTarget: SoundTarget,
     val label: String = "",
+    val tone: Tone = Tone.CHIME,
 )
 
-/** Dismiss / bedtime messages exchanged over the Data Layer. */
+/** Dismiss messages exchanged over the Data Layer, and the `/instance/{id}/state` catch-up item. */
 @Serializable
 data class Command(
     val instanceId: String,
     val sentAtEpochMs: Long,
     val from: Device,
+)
+
+/** Watch → phone: arm or disarm channel [alarmId] (`/cmd/toggle`). */
+@Serializable
+data class ToggleCommand(val alarmId: Long, val sentAtEpochMs: Long)
+
+/** Watch → phone: the bed button was pressed (`/sleep/bedtime`). */
+@Serializable
+data class BedtimeMessage(val atEpochMs: Long)
+
+/** Watch → phone: an asleep/awake transition from Health Services passive monitoring (`/sleep/signal`). */
+@Serializable
+data class SleepSignalMessage(val atEpochMs: Long, val asleep: Boolean)
+
+/** Watch → phone reply to the `/health` ping. */
+@Serializable
+data class HealthReply(val worn: Boolean, val sentAtEpochMs: Long)
+
+/** Phone → watch (`/sleep/summary`): what the tile and complications show. */
+@Serializable
+data class SleepSummary(
+    /** ISO local date the night belongs to (the wake date), or null before the first night. */
+    val wakeDate: String?,
+    val totalSleepMin: Int?,
+    val bedtimeEpochMs: Long?,
+    val wakeEpochMs: Long?,
+    val goalMin: Int,
+    val fromHealthConnect: Boolean,
 )

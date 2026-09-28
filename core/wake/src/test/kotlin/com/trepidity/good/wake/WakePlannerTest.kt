@@ -56,4 +56,12 @@ class WakePlannerTest {
         assertEquals(t.minusSeconds(30), squeezed.at(StageType.LIGHT))
         assertEquals(t.plusSeconds(15), squeezed.at(StageType.ESCALATE))
     }
+
+    /** Gate: REVIEW R2 — the phone starts at T−10, so a fixed 25-min lock would lapse at T+15. */
+    @Test
+    fun `wake lock started at the light stage still holds at auto-silence`() {
+        val start = t.minusSeconds(600)
+        val holdUntil = start.plusMillis(WakePlanner.holdMs(start, t, gentle))
+        assertTrue(holdUntil.isAfter(WakePlanner.silenceAt(t, gentle)))
+    }
 }

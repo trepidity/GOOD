@@ -27,4 +27,6 @@ include(":core:model")
 include(":core:wake")
 include(":core:sync")
 include(":core:ring")
-// Added in later milestones: :core:data (Room, M1), :core:sleep (Health Connect + Sleep API, M3)
+include(":core:lcd")
+include(":core:sleep")
+// Phone storage (Room) lives in :app-phone under data/.

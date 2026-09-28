@@ -11,6 +11,9 @@ object DataLayerPaths {
     const val CMD_DISMISS = "/cmd/dismiss"
     const val CMD_TOGGLE = "/cmd/toggle"
     const val SLEEP_BEDTIME = "/sleep/bedtime"
+    const val SLEEP_SIGNAL = "/sleep/signal"
+    const val SLEEP_SUMMARY = "/sleep/summary"
+    const val INSTANCE_PREFIX = "/instance/"
     const val HEALTH = "/health"
     const val HEALTH_REPLY = "/health/reply"
 
@@ -25,7 +28,7 @@ object DataLayerPaths {
 }
 
 object SyncCodec {
-    private val json = Json {
+    @PublishedApi internal val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
@@ -36,7 +39,16 @@ object SyncCodec {
     fun encode(command: Command): ByteArray = json.encodeToString(command).encodeToByteArray()
     fun decodeCommand(bytes: ByteArray): Command = json.decodeFromString(bytes.decodeToString())
 
+    /** Any other @Serializable Data Layer payload (summary, signals, replies, toggles). */
+    inline fun <reified T> encodeAny(value: T): ByteArray = json.encodeToString(value).encodeToByteArray()
+    inline fun <reified T> decodeAny(bytes: ByteArray): T = json.decodeFromString(bytes.decodeToString())
+
     /** A device keeps an incoming snapshot only if it is newer than what it already has. */
     fun shouldApply(incoming: ScheduleSnapshot, current: ScheduleSnapshot?): Boolean =
         current == null || incoming.version > current.version
 }
+
+/** `/instance/{id}/state` → id, or null for any other path. */
+fun instanceIdFromStatePath(path: String?): String? =
+    path?.takeIf { it.startsWith(DataLayerPaths.INSTANCE_PREFIX) && it.endsWith("/state") }
+        ?.removePrefix(DataLayerPaths.INSTANCE_PREFIX)?.removeSuffix("/state")

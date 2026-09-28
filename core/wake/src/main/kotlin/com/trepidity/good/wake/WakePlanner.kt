@@ -79,6 +79,10 @@ object WakePlanner {
     fun silenceAt(fireAt: Instant, profile: WakeProfile): Instant =
         fireAt.plus(Duration.ofMinutes(profile.autoSilenceMinutes.toLong()))
 
+    /** Wake-lock length for a ring service starting at [serviceStart]: until auto-silence plus 2 min (REVIEW R2). */
+    fun holdMs(serviceStart: Instant, fireAt: Instant, profile: WakeProfile): Long =
+        Duration.between(serviceStart, silenceAt(fireAt, profile)).plusMinutes(2).toMillis().coerceAtLeast(60_000L)
+
     /**
      * Squeeze a plan around [anchor] by [factor] (e.g. 0.05) for the 60-second "Preview" button.
      */
