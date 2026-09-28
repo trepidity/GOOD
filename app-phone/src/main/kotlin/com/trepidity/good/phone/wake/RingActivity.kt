@@ -26,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import com.trepidity.good.lcd.CaseButton
 import com.trepidity.good.lcd.LcdPalette
@@ -99,8 +101,9 @@ class RingActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(20.dp))
                 // Big target: a half-asleep hand only has to find the lower half of the screen and hold.
+                // The face takes the backlight's colour, so it is findable in the dark and never white at night.
                 CaseButton(
-                    "HOLD STOP", palette,
+                    "HOLD STOP", palette.copy(caseColor = lerp(palette.panel, Color.Black, 0.45f), label = lerp(palette.panel, Color.White, 0.3f)),
                     onClick = {},
                     modifier = Modifier.fillMaxWidth().height(132.dp),
                     faceHeight = 96.dp,
