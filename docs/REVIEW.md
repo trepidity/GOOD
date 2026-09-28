@@ -74,3 +74,12 @@ Both apps were installed on emulators and driven through every mode, a 60-second
 | # | Sev | Finding | Remediation |
 |---|---|---|---|
 | C1 | Critical | **An overdue occurrence was silently skipped.** When an occurrence stayed `SCHEDULED` past T but inside its silence window (its alarm broadcast never arrived, e.g. dropped by OxygenOS or lost across a reboot), the next `rescheduleAll()` (even just opening the app) rolled it to tomorrow: no late ring, no MISSED entry, and a one-shot stayed armed. Boot re-registration also used a fixed 20-min cutoff (60 s on the watch), shorter than a custom silence window. | `ScheduleBuilder` keeps an overdue, unedited occurrence, so it is re-registered and rings at once with ramps resumed; an edited or disarmed channel is still replaced. Both devices re-register on boot within each profile's own silence window. Two tests; both mutations killed. |
+
+## Found on the real devices (UAT, 2026-09-28)
+
+| # | Sev | Finding | Remediation |
+|---|---|---|---|
+| F1 | Critical | **The 2R force-stops idle third-party apps, erasing their alarms.** `system_server` (the OnePlus framework) force-stopped GOOD 20–44 s after each time it went idle (`dumpsys activity exit-info`: USER REQUESTED / FORCE STOP). The second test alarm never fired on the watch; the phone's T+5 safety net rang on time. This is the spec's top watch risk, confirmed. | Allowlisting GOOD through adb (deviceidle whitelist, RUN_ANY_IN_BACKGROUND, active standby bucket) stopped the kills; the process survived 4.5 min and more with no new force stop. README setup documents the grants, and watch CHK → PWR shows them. Defence in depth: whenever Play services wakes GOOD on the watch (the phone's T−10 `/health` ping, a sync, a reconnect), it re-registers its stored alarms. |
+| F2 | Low | TST registered twice within about 2 s on both runs; the first tap probably gave too little feedback. | Harmless (the second replaces the first); feedback fix pending. |
+
+Verified on hardware: the phone–watch ping (`reachable=true worn=true`); watch dismiss reaching the phone in **546 ms** (F4 gate: ≤ 2 s); the watch ringing screen opening over the watch face with the overlay grant; the phone safety net at T+5 (+0 ms); phone dismiss waking the watch listener.

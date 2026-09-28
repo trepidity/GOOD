@@ -65,6 +65,7 @@ class WatchListenerService : WearableListenerService() {
         when (event.path) {
             DataLayerPaths.CMD_DISMISS -> runCatching { SyncCodec.decodeCommand(event.data) }.getOrNull()?.let(::remoteDismiss)
             DataLayerPaths.HEALTH -> {
+                rearm()
                 val app = application as WearApplication
                 app.appScope.launch {
                     val reply = HealthReply(worn = WornSensor.isWorn(this@WatchListenerService), sentAtEpochMs = System.currentTimeMillis())
@@ -78,7 +79,17 @@ class WatchListenerService : WearableListenerService() {
         }
     }
 
+    /**
+     * The 2R's system force-stops idle third-party apps, which erases their alarms (verified on the watch,
+     * 2026-09-28). Every time Play services wakes GOOD (the phone's T−10 ping, a sync, a reconnect), re-register
+     * the stored schedule, so a kill between syncs is repaired before the first stage at T−3.
+     */
+    private fun rearm() {
+        WatchScheduleStore.load(this)?.let { WatchAlarmScheduler.apply(this, it) }
+    }
+
     override fun onCapabilityChanged(info: CapabilityInfo) {
+        rearm()
         if (info.nodes.any { it.isNearby }) {
             (application as WearApplication).appScope.launch { WatchSync.flush(this@WatchListenerService) }
         }

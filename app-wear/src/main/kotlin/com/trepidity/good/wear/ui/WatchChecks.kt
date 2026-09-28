@@ -24,6 +24,7 @@ enum class CheckItem(val code: String, val speech: String) {
     EXA("EXA", "Exact alarms"),
     FSI("FSI", "Full-screen alarm"),
     SCR("SCR", "Ringing screen over the watch face"),
+    PWR("PWR", "Kept alive by the watch's power manager"),
     NTF("NTF", "Notifications"),
     BODY("BODY", "Wrist sensor"),
     LINK("LINK", "Phone link"),
@@ -55,6 +56,11 @@ object WatchChecks {
             CheckItem.SCR to Settings.canDrawOverlays(context).let { ok ->
                 CheckResult(ok, if (ok) "" else "ADB GRANT", if (ok) "OK" else "Not granted. Run the appops command in the README")
             },
+            // The 2R force-stops idle apps, erasing their alarms, unless GOOD is allowlisted (README setup).
+            CheckItem.PWR to context.getSystemService(android.os.PowerManager::class.java)
+                .isIgnoringBatteryOptimizations(context.packageName).let { ok ->
+                    CheckResult(ok, if (ok) "" else "ADB GRANT", if (ok) "OK" else "Not allowlisted. Run the setup commands in the README")
+                },
             CheckItem.NTF to perm(granted(context, Manifest.permission.POST_NOTIFICATIONS)),
             CheckItem.BODY to when {
                 !offBody -> CheckResult(false, "NO SENSOR", "No off-body sensor")
