@@ -37,7 +37,7 @@ V1 covers alarms, the staged wake-up and automatic sleep logging; smart-window w
 - Reliability: alarms scheduled with the OS alarm-clock API, restored after reboot, time-zone change and app update.
 - Privacy: no network permission in v1; data stays in the on-device database, excluded from cloud backup unless you opt in.
 - Battery: under 3% overnight drain on the watch and under 2% on the phone from GOOD itself.
-- Accessibility: large touch targets on the watch; dismiss works half-asleep without precise taps (full-width swipe or a long press on the crown button).
+- Accessibility: large touch targets on the watch; dismiss works half-asleep without precise taps (press and hold for 2 s: STOP on the phone, anywhere on the watch).
 - Out of scope for v1: iOS, other watch brands, cloud sync, sharing.
 
 ## Platform constraints
@@ -168,34 +168,56 @@ Sleep stages are displayed only when OHealth provides them; GOOD does not comput
 
 ## UX design
 
-The phone is where you set things up and review sleep; the watch is where you go to bed and wake up, so its screens favour one-gesture actions over menus.
+GOOD doesn't look like a stock alarm app with lists, toggles and a floating + button. It looks and works like a '90s digital sports watch, a nod to Timex's Ironman-era LCD watches: one LCD panel, a LIGHT button, and four case buttons that change meaning by mode.
 
-**Phone screens**
+```
+ ┌──────────────────────────────┐
+ │ ┌──────────────────────────┐ │   Modes, not screens: ALM · SLP · PRO · CHK
+ │ │ [ALM]  SLP   PRO   CHK   │ │   (MODE button, or swipe sideways on the LCD)
+ │ │                          │ │
+ │ │   6:30              AL1  │ │   Seven-segment digits; unlit segments faintly visible
+ │ │  M T W T F S S           │ │   Alarm channels AL1–AL4 (four fixed alarms, no list)
+ │ │  IN 7:20 · GENTLE        │ │
+ │ │  🔔  ∞  ☾                │ │   Glyphs: armed · watch linked · sleep tracking
+ │ └──────────────────────────┘ │
+ │         (   LIGHT   )        │   Teal night glow for 3 s
+ │   (  SET  )     (   ▲   )    │   SET: field flashes; ▲▼ change it (hold = fast)
+ │   (  MODE )     ( ▼/STOP )   │   While ringing: hold STOP 2 s to dismiss
+ └──────────────────────────────┘
+```
 
-| Screen | Contents | Key actions |
-| --- | --- | --- |
-| Alarms (home) | Next-alarm card ("in 7 h 20 m", suggested bedtime for your sleep goal), alarm list with toggles, watch status chip (connected, battery, last sync) | Add alarm, toggle, open editor |
-| Alarm editor | Time, repeat days, label, wake profile, sound device (Auto: watch when worn, else phone; phone; watch; both) | Save; "Preview" runs the whole profile compressed into 60 s |
-| Wake profiles | Presets: Gentle (default), Quick (T−3 / T−1 / T), Heavy sleeper (escalate at T+2); editor shows the stages on a time line with draggable start points | Duplicate, edit, set default |
-| Ringing | Full-screen gradient that tracks the light ramp, large time; buttons fade in at stage 3 | Full-width slide to dismiss (the only control) |
-| Sleep | Last night card (total sleep, bed → wake, source badge), 7- and 30-day bars against the goal line, consistency figure | Open a night, edit its times |
-| Settings | Sleep goal, bedtime reminder, default profile, Reliability check (each permission and battery setting with status and a Fix button), test alarm | Fix permissions, run test |
+Every screen is the same instrument in a different mode, so there is nothing to navigate, only MODE to press.
+
+**Modes** (MODE button, or swipe sideways on the LCD)
+
+| Mode | LCD shows | ▲ / ▼ | SET |
+| --- | --- | --- | --- |
+| ALM · Alarm | Next alarm in big digits, channel (AL1–AL4), lit weekday segments, "IN 7:20 · GENTLE" | Switch channel AL1 → AL4 | Edit: hour flashes → minute → days → profile → sound; hold SET 2 s to arm or disarm |
+| SLP · Sleep | Last night's total ("7:42") as a chrono readout, bed → wake, a 7-night LCD bar graph, OH glyph when the data came from OHealth | Recall LAP 01 → LAP 30 (one lap per night) | Log bedtime now ("GOOD NIGHT" scrolls across) |
+| PRO · Profile | The wake profile as an interval timer: INT 1 LIGHT 10:00, INT 2 BUZZ 3:00, INT 3 TONE, INT 4 FULL +5:00 | Step through intervals | Edit the flashing interval's length |
+| CHK · Check | Self-test like a watch's segment test: ALM, FSI, BAT, LINK, HC each show a check or blink | Step through items | Open the fix for the blinking item |
+
+**Ringing**
+
+- Phone: the LCD panel is the sunrise. Its backlight warms from deep red through amber to white over the light stage while the digits stay dark, like a lit LCD.
+- Dismiss = press and hold STOP (lower right) for 2 s. A segment bar fills across the LCD with a rising haptic tick; releasing early does nothing. There is no snooze control on either device.
+- Watch: the 2R's round screen shows the time in segments. To dismiss, press and hold anywhere for 2 s while 60 segments fill around the edge, like a seconds track. The system swipe-to-close is disabled.
 
 **Watch surfaces**
 
-| Surface | Contents | Key actions |
-| --- | --- | --- |
-| Tile | Next alarm and countdown, last night's total sleep | "Bed" button logs bedtime |
-| Complications | Next alarm (short text); last night's sleep against goal (ranged value) | Tap opens app |
-| App | Alarm list with toggles; toggles are sent to the phone, which applies them and republishes the schedule | Toggle, skip next occurrence |
-| Ringing, stage 2 | Dim, black screen with time only, so it doesn't light the room | Swipe to dismiss |
-| Ringing, stage 3+ | Time and a full-width "swipe to dismiss" track | Swipe to dismiss; the system swipe-to-close is disabled on this screen |
+| Surface | Contents |
+| --- | --- |
+| Tile | LCD strip: `AL1 6:30` and `SLP 7:42`, with a BED button |
+| Complications | Next alarm in segment digits (short text); last night's sleep against goal (ranged value) |
+| App | The same four modes. Tap the top half for ▲ and the bottom half for ▼; swipe sideways for MODE; long-press for SET |
 
-**Design rules**
+**Look and feel**
 
-- Dark theme everywhere; the ringing screens never show white until the light ramp reaches it.
-- Every destructive or overnight-critical setting (disable alarm, change profile) shows the next fire time after saving.
-- There is no snooze. Dismiss requires a deliberate swipe, so a half-asleep tap never ends the alarm by accident.
+- Two panel states: *Day LCD* (grey-green reflective panel, near-black segments) and *Night glow* (black case, teal-lit panel when LIGHT is pressed). No white UI ever appears at night.
+- Type: seven-segment digits and 14-segment letters drawn in Compose `Canvas`, so no font licence is needed. Button labels in small caps.
+- Sound option "Classic": the four-beep digital-watch alarm pattern. Like the chime, it starts at about 5% and keeps rising.
+- Haptics: a crisp tick per button press, a double tick on MODE, rising ticks while STOP is held.
+- Trademark note: the design only nods to Timex. The app never uses Timex names or logos, or "Indiglo" or "Ironman"; the night light is simply called GLOW.
 
 ## Data model & storage
 

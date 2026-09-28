@@ -3,7 +3,7 @@
     <style name="Theme.Good.Wear" parent="android:Theme.DeviceDefault">
         <item name="android:windowBackground">@android:color/black</item>
     </style>
-    <!-- The ringing screen must not close on the system swipe: dismiss is GOOD's own deliberate swipe. -->
+    <!-- The ringing screen must not close on the system swipe: dismiss is GOOD's own 2-second hold. -->
     <style name="Theme.Good.Wear.Ring">
         <item name="android:windowSwipeToDismiss">false</item>
     </style>

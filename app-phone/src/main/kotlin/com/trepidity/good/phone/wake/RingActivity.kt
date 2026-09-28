@@ -5,6 +5,14 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,8 +44,8 @@ import java.time.format.DateTimeFormatter
 
 /**
  * Full-screen ringing UI. Tracks the light ramp: screen brightness 1% → 100% and a colour sweep
- * from deep red through amber to warm white. The dismiss slider appears once the sound stage begins.
- * There is no snooze, by design.
+ * from deep red through amber to warm white. HOLD STOP appears once the sound stage begins.
+ * There is no snooze, by design. (The LCD design language from docs/SPEC.md replaces this spike UI in M1.)
  */
 class RingActivity : ComponentActivity() {
 
@@ -91,18 +98,40 @@ class RingActivity : ComponentActivity() {
         }
     }
 
+    /** The only control: press and hold STOP for 2 s while a segment bar fills. Releasing early does nothing. */
     @Composable
     private fun Controls(ink: Color) {
-        var slide by remember { mutableFloatStateOf(0f) }
+        var held by remember { mutableFloatStateOf(0f) }
+        val scope = rememberCoroutineScope()
         Column(Modifier.fillMaxWidth().padding(bottom = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            // The only control: a deliberate full-width slide, so a half-asleep tap can't end the alarm.
-            Text("Slide to dismiss", color = ink, fontSize = 24.sp)
-            Slider(
-                value = slide,
-                onValueChange = { slide = it },
-                onValueChangeFinished = { if (slide > 0.95f) send(WakeService.ACTION_DISMISS) else slide = 0f },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Row(Modifier.fillMaxWidth().height(12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                repeat(SEGMENTS) { i ->
+                    val lit = held * SEGMENTS > i
+                    Box(Modifier.weight(1f).fillMaxHeight().background(ink.copy(alpha = if (lit) 1f else 0.12f)))
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .border(2.dp, ink, RoundedCornerShape(48.dp))
+                    .pointerInput(Unit) {
+                        detectTapGestures(onPress = {
+                            val job = scope.launch {
+                                val start = System.currentTimeMillis()
+                                while (held < 1f) {
+                                    held = ((System.currentTimeMillis() - start) / HOLD_MS.toFloat()).coerceAtMost(1f)
+                                    delay(16)
+                                }
+                                send(WakeService.ACTION_DISMISS)
+                            }
+                            tryAwaitRelease()
+                            if (held < 1f) { job.cancel(); held = 0f }
+                        })
+                    },
+                contentAlignment = Alignment.Center,
+            ) { Text("HOLD STOP", color = ink, fontSize = 28.sp, letterSpacing = 4.sp) }
         }
     }
 
@@ -128,5 +157,7 @@ class RingActivity : ComponentActivity() {
         val DEEP_RED = Color(0xFF1A0200)
         val AMBER = Color(0xFFB34A00)
         val WARM_WHITE = Color(0xFFFFF2DE)
+        const val SEGMENTS = 12
+        const val HOLD_MS = 2_000L
     }
 }
