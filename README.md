@@ -50,7 +50,7 @@ Watch: tap the top or bottom half for ▲ / ▼, swipe sideways for MODE, hold 2
    adb -s <watch> shell cmd appops set com.trepidity.good RUN_ANY_IN_BACKGROUND allow
    adb -s <watch> shell am set-standby-bucket com.trepidity.good active
    ```
-   The last three keep the 2R's power manager from force-stopping GOOD about 30 s after it goes idle, which erases its alarms (REVIEW F1). Watch CHK → **PWR** shows whether the allowlist is in place.
+   The 2R's system force-stops idle apps, which erases their alarms (REVIEW F1). GOOD defends itself with a silent "armed" notification on the watch whenever an alarm is pending. That is what actually keeps it alive; these grants add margin. Watch CHK → **PWR** shows the allowlist. **Don't swipe away the GOOD notification**, and after reinstalling GOOD on the watch, open it once.
    Wear OS doesn't show an alarm's full-screen notification, and it blocks background activity launches. This grant lets the watch open its hold-to-stop screen (REVIEW E1). Without it the watch still buzzes and plays sound, but you'd have to tap the notification to get the stop screen. Watch CHK → **SCR** shows whether the grant is in place.
 4. Both apps must share the application ID `com.trepidity.good` and the signing key, or they won't see each other over the Data Layer. Debug builds from the same machine already share a key.
 5. On the phone, open GOOD, allow notifications, and go through **CHK** until everything shows OK. On OxygenOS also set **Settings → Apps → GOOD → Battery usage → Unrestricted**. On CHK → HC, grant sleep access, including background reads if offered.

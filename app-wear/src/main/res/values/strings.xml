@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">GOOD</string>
     <string name="channel_alarm">Alarms</string>
+    <string name="channel_armed">Alarm armed</string>
     <string name="tile_label">GOOD</string>
     <string name="tile_description">Next alarm, last night\'s sleep and the bed button</string>
     <string name="complication_next_alarm">Next alarm</string>

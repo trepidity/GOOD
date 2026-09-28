@@ -46,6 +46,7 @@ object WatchAlarmScheduler {
             val e = pending[channel]
             if (e == null) cancelChannel(context, channel) else schedule(context, e)
         }
+        ArmedService.sync(context, pending.isNotEmpty())
     }
 
     fun cancelChannel(context: Context, channel: Long) {

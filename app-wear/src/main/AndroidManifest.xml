@@ -48,6 +48,12 @@
             android:theme="@style/Theme.Good.Wear.Ring" />
 
         <service
+            android:name=".alarm.ArmedService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted" />
+
+        <service
             android:name=".wake.WakeStageService"
             android:directBootAware="true"
             android:exported="false"

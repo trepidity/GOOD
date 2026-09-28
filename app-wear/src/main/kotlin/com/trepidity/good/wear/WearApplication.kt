@@ -20,6 +20,13 @@ class WearApplication : Application() {
                 enableVibration(false) // HapticRamp drives the motor
             }
         )
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(CHANNEL_ARMED, getString(R.string.channel_armed), NotificationManager.IMPORTANCE_MIN).apply {
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
+            }
+        )
         // Components run before first unlock too (direct boot); the stores are device-protected, but prime them
         // only once the user is unlocked so nothing here ever reaches for credential-encrypted storage.
         if (getSystemService(UserManager::class.java).isUserUnlocked) {
@@ -30,5 +37,6 @@ class WearApplication : Application() {
 
     companion object {
         const val CHANNEL_ALARM = "alarm"
+        const val CHANNEL_ARMED = "armed"
     }
 }

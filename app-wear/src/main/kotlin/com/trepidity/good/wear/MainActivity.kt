@@ -15,6 +15,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Opening GOOD clears a force stop; re-register what the stored schedule says (REVIEW F1).
+        com.trepidity.good.wear.alarm.WatchScheduleStore.load(this)?.let { com.trepidity.good.wear.alarm.WatchAlarmScheduler.apply(this, it) }
         WatchScheduleStore.load(this)
         WatchScheduleStore.summary(this)
         setContent { WatchApp(resumes, onExit = ::finish) }
