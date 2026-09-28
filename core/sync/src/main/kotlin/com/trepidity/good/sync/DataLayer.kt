@@ -1,0 +1,42 @@
+package com.trepidity.good.sync
+
+import com.trepidity.good.model.Command
+import com.trepidity.good.model.ScheduleSnapshot
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+/** Wearable Data Layer paths shared by the phone and watch apps (see docs/SPEC.md, Architecture). */
+object DataLayerPaths {
+    const val SCHEDULE = "/schedule"
+    const val CMD_DISMISS = "/cmd/dismiss"
+    const val CMD_TOGGLE = "/cmd/toggle"
+    const val SLEEP_BEDTIME = "/sleep/bedtime"
+    const val HEALTH = "/health"
+    const val HEALTH_REPLY = "/health/reply"
+
+    /** Key of the byte-array payload inside a DataMap. */
+    const val KEY_PAYLOAD = "payload"
+
+    /** Capabilities advertised in res/values/wear.xml of each app. */
+    const val CAPABILITY_PHONE = "good_phone"
+    const val CAPABILITY_WATCH = "good_watch"
+
+    fun instanceState(instanceId: String) = "/instance/$instanceId/state"
+}
+
+object SyncCodec {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
+
+    fun encode(snapshot: ScheduleSnapshot): ByteArray = json.encodeToString(snapshot).encodeToByteArray()
+    fun decodeSchedule(bytes: ByteArray): ScheduleSnapshot = json.decodeFromString(bytes.decodeToString())
+
+    fun encode(command: Command): ByteArray = json.encodeToString(command).encodeToByteArray()
+    fun decodeCommand(bytes: ByteArray): Command = json.decodeFromString(bytes.decodeToString())
+
+    /** A device keeps an incoming snapshot only if it is newer than what it already has. */
+    fun shouldApply(incoming: ScheduleSnapshot, current: ScheduleSnapshot?): Boolean =
+        current == null || incoming.version > current.version
+}
