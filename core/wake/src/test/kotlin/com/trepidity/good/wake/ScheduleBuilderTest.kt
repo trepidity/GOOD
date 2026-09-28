@@ -60,4 +60,17 @@ class ScheduleBuilderTest {
     fun `a disarmed channel registers nothing`() {
         assertNull(decide(daily.copy(enabled = false), instance(InstanceState.SCHEDULED), at("2026-09-30T22:00")).active)
     }
+
+    /** Review follow-up: the alarm broadcast never arrived (dropped, or a reboot); opening the app must not skip it. */
+    @Test
+    fun `an overdue occurrence that never rang is kept so it rings late instead of rolling to tomorrow`() {
+        val overdue = instance(InstanceState.SCHEDULED)
+        assertSame(overdue, decide(daily, overdue, now = at("2026-10-01T06:34")).active)
+    }
+
+    @Test
+    fun `an overdue occurrence of a channel that was edited since is replaced, not rung`() {
+        val d = decide(daily.copy(hour = 7, minute = 0), instance(InstanceState.SCHEDULED), now = at("2026-10-01T06:34"))
+        assertEquals(at("2026-10-01T07:00").toEpochMilli(), d.active!!.scheduledAtEpochMs)
+    }
 }

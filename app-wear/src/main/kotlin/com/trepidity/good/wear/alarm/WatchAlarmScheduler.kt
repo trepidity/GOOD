@@ -40,7 +40,7 @@ object WatchAlarmScheduler {
     fun apply(context: Context, snapshot: ScheduleSnapshot) {
         val now = System.currentTimeMillis()
         val pending = snapshot.entries
-            .filter { it.instance.state == InstanceState.SCHEDULED && it.instance.scheduledAtEpochMs > now - 60_000 }
+            .filter { it.instance.state == InstanceState.SCHEDULED && it.instance.scheduledAtEpochMs > now - it.profile.autoSilenceMinutes * 60_000L }
             .associateBy { it.instance.alarmId }
         for (channel in CHANNELS) {
             val e = pending[channel]

@@ -68,3 +68,9 @@ Both apps were installed on emulators and driven through every mode, a 60-second
 | E6 | Medium | `CaseButton` judged tap vs. hold by when it *processed* the release. On a slow frame, a tap on SET was taken as an abandoned hold and ignored. | It now uses the touch events' own timestamps. |
 | E7 | Medium | MODE during an edit both cancelled the edit and moved to the next mode, so one press did two things. | MODE while a field is flashing only leaves set mode, like a real watch. |
 | E8 | Low | PRO ▼ went up the list; the ring clock ignored the 12/24-hour setting; "PREVIEW" appeared twice; the STOP button face was a thin dark pill; the panel left two-thirds empty on a tall phone. | All fixed; STOP is now a 96 dp face on a 132 dp target. |
+
+## Found by the independent code review of the finished build
+
+| # | Sev | Finding | Remediation |
+|---|---|---|---|
+| C1 | Critical | **An overdue occurrence was silently skipped.** When an occurrence stayed `SCHEDULED` past T but inside its silence window (its alarm broadcast never arrived, e.g. dropped by OxygenOS or lost across a reboot), the next `rescheduleAll()` (even just opening the app) rolled it to tomorrow: no late ring, no MISSED entry, and a one-shot stayed armed. Boot re-registration also used a fixed 20-min cutoff (60 s on the watch), shorter than a custom silence window. | `ScheduleBuilder` keeps an overdue, unedited occurrence, so it is re-registered and rings at once with ramps resumed; an edited or disarmed channel is still replaced. Both devices re-register on boot within each profile's own silence window. Two tests; both mutations killed. |

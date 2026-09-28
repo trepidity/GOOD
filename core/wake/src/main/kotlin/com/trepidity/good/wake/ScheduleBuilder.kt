@@ -5,6 +5,7 @@ import com.trepidity.good.model.AlarmInstance
 import com.trepidity.good.model.InstanceState
 import com.trepidity.good.model.WakeProfile
 import java.time.Instant
+import java.time.LocalTime
 import java.time.ZoneId
 
 object InstanceIds {
@@ -35,9 +36,14 @@ object ScheduleBuilder {
         if (last != null) {
             val lastT = Instant.ofEpochMilli(last.scheduledAtEpochMs)
             val live = !last.state.isTerminal && now.isBefore(WakePlanner.silenceAt(lastT, profile))
+            val overdue = live && !now.isBefore(lastT)
+            val unchanged = alarm.enabled && lastT.atZone(zone).toLocalTime() == LocalTime.of(alarm.hour, alarm.minute)
             when {
                 live && last.state == InstanceState.FIRING -> return ChannelDecision(last, null)
-                live -> Unit // SCHEDULED and still ahead: recompute below so edits take effect
+                // Past T but its alarm never arrived (dropped, or a reboot): keep it so it is re-registered and
+                // rings now, ramps resumed, instead of silently rolling to tomorrow.
+                overdue && unchanged -> return ChannelDecision(last, null)
+                live -> Unit // still ahead, or the channel was edited since: recompute below
                 !last.state.isTerminal -> {
                     missed = last.copy(state = InstanceState.SILENCED, currentStage = null)
                     after = maxOf(now, lastT)
