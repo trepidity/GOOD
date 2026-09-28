@@ -1,6 +1,6 @@
 # GOOD Alarm — Design & Build Spec
 
-As of 2026-09-27 · Jared · Living copy: the Claude doc "GOOD Alarm — Design & Build Spec"
+As of 2026-09-27 · Jared · Living copy: the Claude doc "GOOD Alarm — Design & Build Spec" · Revised after the review in [REVIEW.md](REVIEW.md) (finding IDs in brackets)
 
 ## Overview & goals
 
@@ -19,7 +19,7 @@ V1 covers alarms, the staged wake-up and automatic sleep logging; smart-window w
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| F1 | Create, edit, delete and toggle alarms: time, repeat days, label, per-alarm wake profile | Must |
+| F1 | Four alarm channels (AL1–AL4): set time, repeat days, wake profile, tone and sound target; arm and disarm. Arming a channel creates the alarm, disarming deletes it [U2] | Must |
 | F2 | Staged wake-up: phone light ramp → watch vibration ramp → audible sound on phone and/or watch | Must |
 | F3 | Configurable stage offsets and durations per profile (e.g. light at T−10 min, haptics at T−3 min, sound at T) | Must |
 | F4 | Dismiss from phone or watch, synced to the other device. No snooze, ever | Must |
@@ -53,6 +53,7 @@ On Android 14+ an alarm fires reliably only through `AlarmManager.setAlarmClock(
 | Watch OS | Wear OS 5 is based on Android 14; the 2R pairs a Snapdragon W5 Gen 1 with a BES2700 MCU ([specs](https://www.oneplus.com/global/oneplus-watch-2r/specs)) | Watch minSdk 33; keep watch work to short wakes — GOOD runs on the W5, which costs battery |
 | Watch hardware | Built-in speaker (used for calls); haptics described as weak; accelerometer, gyroscope, optical HR, SpO2, light sensor; 500 mAh ([review](https://www.smartprix.com/bytes/oneplus-watch-2r-review-an-interesting-wear-os-watch/)) | Watch plays the sound stage by default; haptic patterns use long, full-amplitude pulses |
 | Sleep data | OHealth uploads steps, heart rate and sleep to Health Connect ([Sahha](https://sahha.ai/integrations/ohealth/)); Health Connect is built into Android 14 and its `SleepSessionRecord` carries stages ([source](https://developer.android.com/health-and-fitness/health-connect/data-types)) | Health Connect is the primary sleep source |
+| Health Connect in background | Reads are foreground-only unless the app holds `READ_HEALTH_DATA_IN_BACKGROUND` | Request it where the feature is available; also sync every time the app opens [P1] |
 | Watch sensing | Health Services passive monitoring can report `USER_ACTIVITY_ASLEEP` where the device supports it ([source](https://developer.android.com/training/wearables/health-services/passive)) | Check capabilities on the 2R in the first spike; use only if supported |
 | Phone sensing | The Play services Sleep API gives periodic sleep-confidence events and a daily sleep segment ([source](https://developers.google.com/location-context/sleep)); its codelab is marked deprecated | Fallback source only |
 
@@ -92,7 +93,12 @@ The phone is the source of truth; every edit pushes a new schedule snapshot to t
 | `/instance/{id}/state` | DataItem | both ways | Current state of a firing alarm (ringing, dismissed, silenced) with a timestamp |
 | `/cmd/dismiss` | Message | both ways | Instance id; the receiver stops its stages within 2 s |
 | `/sleep/bedtime` | Message | watch → phone | Time the bed button was pressed |
-| `/health` | Message | phone → watch | Ping before each alarm to confirm the watch is reachable and worn |
+| `/sleep/signal` | Message | watch → phone | Asleep/awake transition from Health Services passive monitoring [U8] |
+| `/sleep/summary` | DataItem | phone → watch | Last night's total, bed and wake times, goal, source; feeds the tile and complications [U7] |
+| `/cmd/toggle` | Message | watch → phone | Arm or disarm a channel from the watch [U6] |
+| `/health` | Message | phone → watch | Ping when the phone's first stage starts (T−10), to confirm the watch is reachable and worn; the reply (`/health/reply`) carries the off-body state [R8] |
+
+The watch keeps a small outbox in device-protected storage (bedtime, sleep signals, dismiss) and flushes it whenever the phone becomes reachable, so nothing it records is lost while the phone is out of range [U8].
 
 ## Gentle wake-up sequence
 
@@ -116,7 +122,7 @@ stateDiagram-v2
   Dismissed --> [*]
 ```
 
-There is no snooze: dismiss from any stage ends the alarm everywhere within 2 s and stamps the wake time on the sleep session; auto-silence at T+20 is the only other exit.
+There is no snooze: dismiss from any stage — including the light and haptic stages, where the 2-s hold is armed from the start [U1] — ends the alarm everywhere within 2 s and stamps the wake time on the sleep session; auto-silence at T+20 is the only other exit.
 
 **Default profile ("Gentle")** — every value is editable per profile.
 
@@ -130,10 +136,11 @@ There is no snooze: dismiss from any stage ends the alarm everywhere within 2 s 
 
 **Fallbacks**
 
-- **Watch unreachable or off-wrist.** The phone pings `/health` at T−15 min; the watch answers with its off-body sensor state. No answer or off-wrist → the phone vibrates in stage 2 and plays the sound in stage 3.
+- **Watch unreachable or off-wrist.** The phone pings `/health` when its first stage starts (T−10 min); the watch answers with its off-body sensor state. No answer or off-wrist → the phone vibrates in stage 2 and plays the sound in stage 3.
 - **Watch never got the latest schedule.** The watch fires from its last snapshot; the schedule `version` lets the phone detect and log the mismatch.
 - **Phone in use at T−10.** The system shows a heads-up notification instead of the full screen; GOOD skips the light ramp because the screen is already on.
-- **Phone rebooted overnight.** A `BOOT_COMPLETED` receiver re-registers alarms; a stage whose window already passed is skipped, not replayed.
+- **Phone rebooted overnight.** A `LOCKED_BOOT_COMPLETED` receiver re-registers alarms from the device-protected snapshot before anyone unlocks the phone [R1]. If the ring service starts late, passed stages resume at their current ramp position (the sound doesn't restart at 5%); an occurrence whose auto-silence time has already passed is logged as missed and does not ring [R7].
+- **Alarm volume at zero.** If the alarm stream is at 0 when the sound stage starts, GOOD raises it to half and logs it; CHK shows VOL [R6].
 - **Snooze.** None, by design. No screen, notification or button on either device offers one.
 
 ## Sleep tracking
@@ -192,10 +199,10 @@ Every screen is the same instrument in a different mode, so there is nothing to 
 
 | Mode | LCD shows | ▲ / ▼ | SET |
 | --- | --- | --- | --- |
-| ALM · Alarm | Next alarm in big digits, channel (AL1–AL4), lit weekday segments, "IN 7:20 · GENTLE" | Switch channel AL1 → AL4 | Edit: hour flashes → minute → days → profile → sound; hold SET 2 s to arm or disarm |
-| SLP · Sleep | Last night's total ("7:42") as a chrono readout, bed → wake, a 7-night LCD bar graph, OH glyph when the data came from OHealth | Recall LAP 01 → LAP 30 (one lap per night) | Log bedtime now ("GOOD NIGHT" scrolls across) |
-| PRO · Profile | The wake profile as an interval timer: INT 1 LIGHT 10:00, INT 2 BUZZ 3:00, INT 3 TONE, INT 4 FULL +5:00 | Step through intervals | Edit the flashing interval's length |
-| CHK · Check | Self-test like a watch's segment test: ALM, FSI, BAT, LINK, HC each show a check or blink | Step through items | Open the fix for the blinking item |
+| ALM · Alarm | Next alarm in big digits, channel (AL1–AL4), lit weekday segments, "IN 7:20 · GENTLE" | Switch channel AL1 → AL4 | Edit: hour flashes → minute → days → profile → tone (CHIME / CLASSIC) → sound target (AUTO / PHONE / WATCH / BOTH) [U3]; hold SET 2 s to arm or disarm |
+| SLP · Sleep | Last night's total ("7:42") as a chrono readout, bed → wake, a 7-night LCD bar graph, OH glyph when the data came from OHealth; 7- and 30-day averages, debt and bedtime spread on a second line | Recall LAP 01 → LAP 30 (one lap per night) | Log bedtime now ("GOOD NIGHT" scrolls across); hold SET 2 s to edit the shown night: BED → WAKE → GOAL → REMIND on/off [U5] |
+| PRO · Profile | The wake profile as an interval timer: P1 GENTLE, INT 1 LIGHT 10:00, INT 2 BUZZ 3:00, INT 3 TONE 5:00, INT 4 FULL +5:00, SIL 20 | Step through rows (first row picks the profile P1–P3) [U4] | Edit the flashing row; hold SET 2 s for the 60-s preview |
+| CHK · Check | Self-test like a watch's segment test: ALM, FSI, NTF, BAT, VOL, LINK, HC each show a check or blink; then TST and EXP [U9, U10] | Step through items | Open the fix for the blinking item; on TST, set a real test alarm at +3 min on both devices; on EXP, export all data as JSON |
 
 **Ringing**
 
@@ -209,7 +216,7 @@ Every screen is the same instrument in a different mode, so there is nothing to 
 | --- | --- |
 | Tile | LCD strip: `AL1 6:30` and `SLP 7:42`, with a BED button |
 | Complications | Next alarm in segment digits (short text); last night's sleep against goal (ranged value) |
-| App | The same four modes. Tap the top half for ▲ and the bottom half for ▼; swipe sideways for MODE; long-press for SET |
+| App | The same four modes as views of the phone's data. Tap the top half for ▲ and the bottom half for ▼; swipe sideways for MODE; long-press for SET. Actions: on ALM, long-press arms or disarms the channel (sent to the phone); on SLP, long-press logs bedtime; on CHK, long-press runs the item's test [U6] |
 
 **Look and feel**
 
@@ -225,7 +232,7 @@ The phone keeps everything in one Room database; the watch keeps only a snapshot
 
 | Entity | Key fields | Notes |
 | --- | --- | --- |
-| `Alarm` | id, hour, minute, repeatDays (bitmask), label, enabled, profileId, soundTarget (AUTO / PHONE / WATCH / BOTH; AUTO = watch when worn and reachable, else phone), skipNextDate | Source of truth for the schedule |
+| `Alarm` | id (channel 1–4), hour, minute, repeatDays (bitmask), label, enabled, profileId, tone (CHIME / CLASSIC), soundTarget (AUTO / PHONE / WATCH / BOTH; AUTO = watch when worn and reachable, else phone), skipNextDate | Source of truth for the schedule |
 | `WakeProfile` | id, name, stages (JSON list of `Stage`), autoSilenceMinutes (no snooze fields) | Presets seeded on first launch |
 | `Stage` | type (LIGHT / HAPTIC / SOUND / ESCALATE), device, offsetSec (relative to T), rampSec, params | Embedded in `WakeProfile` |
 | `AlarmInstance` | id, alarmId, scheduledAt (UTC), state (SCHEDULED / FIRING / DISMISSED / SILENCED / SKIPPED), currentStage, dismissedAt, dismissedOn (PHONE / WATCH) | One row per occurrence; drives the state machine and the wake metrics |
@@ -251,17 +258,20 @@ The phone keeps everything in one Room database; the watch keeps only a snapshot
 | `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, `VIBRATE` | Both | Reschedule after reboot; keep CPU awake during stages; haptics | Install time |
 | `ACTIVITY_RECOGNITION` | Both | Phone Sleep API; watch passive asleep state | Runtime prompt |
 | `health.READ_SLEEP`, `health.WRITE_SLEEP` | Phone | Read OHealth sessions, write GOOD's own | Health Connect consent screen |
+| `health.READ_HEALTH_DATA_IN_BACKGROUND` | Phone | Sleep sync jobs read Health Connect after dismiss and at 11:00 [P1] | Health Connect consent screen |
 | `health.READ_HEALTH_DATA_HISTORY` | Phone | One-time import of sleep older than 30 days | Health Connect consent screen (optional) |
 
 **Reliability rules**
 
 1. Phone: one `setAlarmClock()` at the first stage (T−10) plus a backup at T. The status bar therefore shows the first-stage time; that trade-off is accepted because `setAlarmClock()` is the only call exempt from Doze without rate limits.
 2. Watch: `setAlarmClock()` at its first stage (T−3) plus a backup at T, from its own snapshot.
-3. The stage timeline runs inside the foreground service with a partial wake lock, released on dismiss, silence or a 25-min hard cap.
+3. The stage timeline runs inside the foreground service with a partial wake lock, released on dismiss or silence; its hard cap is computed from the plan (service start → auto-silence + 2 min), never a fixed 25 min [R2].
 4. Every scheduling path (boot, app update, time change, time-zone change, schedule sync) goes through one idempotent `rescheduleAll()`.
 5. The Reliability check screen reads `canScheduleExactAlarms()`, `canUseFullScreenIntent()`, `isIgnoringBatteryOptimizations()` and `isBackgroundRestricted()`, and links to the fix for each.
+6. Direct boot: the alarm receivers, the ring services and the ringing screens are `directBootAware`, and the schedule snapshot they need lives in device-protected storage, so a reboot with the phone still locked (e.g. an overnight update) re-registers and rings the alarm [R1].
+7. The next occurrence is computed after max(now, the previous occurrence's T), so dismissing early never re-arms the same morning; a one-shot alarm disarms after it fires [R5].
 
-**Battery budget (overnight, GOOD only):** watch under 3% (no continuous sensor listeners; wakes limited to syncs, the T−15 ping and the stage service ≤ 25 min); phone under 2%.
+**Battery budget (overnight, GOOD only):** watch under 3% (no continuous sensor listeners; wakes limited to syncs, the T−10 ping and the stage service (T−3 → auto-silence)); phone under 2%.
 
 ## Build plan
 
@@ -270,9 +280,9 @@ Single Gradle project in Kotlin with two app modules that share one package name
 | Concern | Choice |
 | --- | --- |
 | Language and build | Kotlin 2.x, Gradle version catalog; phone minSdk 34 / targetSdk 36 (OnePlus 12 on OxygenOS 16, Android 16), watch minSdk 33 / targetSdk 35 |
-| Phone UI | Jetpack Compose, Material 3, Navigation Compose |
+| Phone UI | Jetpack Compose; the LCD instrument is drawn in `Canvas` (no Navigation: one screen, four modes) [P2] |
 | Watch UI | Compose for Wear OS, Horologist, Tiles (ProtoLayout), complication data source |
-| State and DI | Coroutines and Flow, Hilt |
+| State and DI | Coroutines and Flow; a hand-written `AppGraph` instead of Hilt [P3] |
 | Storage | Room (phone), DataStore (both), kotlinx.serialization for Data Layer payloads |
 | Scheduling | `AlarmManager.setAlarmClock()`; WorkManager only for sleep sync jobs |
 | Sync | `play-services-wearable`: DataClient, MessageClient, NodeClient |
@@ -324,6 +334,8 @@ The stage engine and sleep-session builder are pure Kotlin and tested with a fak
 - **Distribution:** installed from Android Studio onto both devices; no Play listing for now.
 - **Sleep source:** keep the OHealth integration (via Health Connect) as the primary sleep source. Replacing it with GOOD's own tracking, which smart wake (F11) and sleep stages (F12) would need, is a possible future phase, not v1.
 - **Snooze:** none, ever. An alarm ends only by dismiss or auto-silence.
+- **DI:** no Hilt; a dozen singletons don't justify a second annotation-processing toolchain (Room already uses KSP).
+- **Verification split:** M1–M4 code is built and unit-tested off-device; each milestone's gate is an on-device check run at UAT and in M5.
 
 ## Sources
 
