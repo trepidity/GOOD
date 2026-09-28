@@ -305,10 +305,10 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
     fun preview(profile: WakeProfile) {
         val fireAt = Instant.now().plusSeconds(30)
         val entry = ScheduleEntry(
-            AlarmInstance(InstanceIds.of(0, fireAt), 0, fireAt.toEpochMilli()), profile, SoundTarget.PHONE, "PREVIEW",
+            AlarmInstance(InstanceIds.of(PREVIEW_CHANNEL, fireAt), PREVIEW_CHANNEL, fireAt.toEpochMilli()), profile, SoundTarget.PHONE, "PREVIEW",
         )
         val snap = ScheduleStore.load(ctx) ?: ScheduleSnapshot(0, 0, emptyList())
-        ScheduleStore.save(ctx, snap.copy(entries = snap.entries.filterNot { it.instance.alarmId == 0L } + entry))
+        ScheduleStore.save(ctx, snap.copy(entries = snap.entries.filterNot { it.instance.alarmId == PREVIEW_CHANNEL } + entry))
         ContextCompat.startForegroundService(ctx, WakeService.startIntent(ctx, entry.instance.id, preview = true))
         banner("PREVIEW")
     }
@@ -356,7 +356,7 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         val entry = ScheduleEntry(AlarmInstance(InstanceIds.of(0, fireAt), 0, fireAt.toEpochMilli()), profile, SoundTarget.AUTO, "TEST")
         viewModelScope.launch(Dispatchers.IO) {
             val snap = ScheduleStore.load(ctx) ?: ScheduleSnapshot(0, 0, emptyList())
-            val next = ScheduleSnapshot(ScheduleStore.nextVersion(ctx), System.currentTimeMillis(), snap.entries.filterNot { it.instance.alarmId == 0L } + entry)
+            val next = ScheduleSnapshot(ScheduleStore.nextVersion(ctx), System.currentTimeMillis(), snap.entries.filterNot { it.instance.alarmId <= 0L } + entry)
             ScheduleStore.save(ctx, next)
             val ok = AlarmScheduler.schedule(ctx, entry)
             val pushed = runCatching { PhoneSync.pushSchedule(ctx, next) }.isSuccess
@@ -414,6 +414,9 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
     companion object {
         /** NAME + the five ProfileRow rows. */
         const val PRO_ROWS = 6
+
+        /** Previews live only in the phone's snapshot: never pushed to the watch, never in Room. */
+        const val PREVIEW_CHANNEL = -1L
 
         private fun <T> cycle(values: List<T>, current: T, delta: Int): T {
             if (values.isEmpty()) return current

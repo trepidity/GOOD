@@ -25,7 +25,7 @@ object BedtimeReminderScheduler {
         am.cancel(pi)
         if (!prefs.bedtimeReminder) return
         val next = snapshot.entries
-            .filter { it.instance.alarmId != 0L && it.instance.state == InstanceState.SCHEDULED }
+            .filter { it.instance.alarmId > 0 && it.instance.state == InstanceState.SCHEDULED }
             .minByOrNull { it.instance.scheduledAtEpochMs } ?: return
         val at = BedtimeReminder.at(Instant.ofEpochMilli(next.instance.scheduledAtEpochMs), prefs.sleepGoalMin)
         if (at.isAfter(Instant.now())) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at.toEpochMilli(), pi)

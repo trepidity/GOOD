@@ -15,8 +15,8 @@ android {
         applicationId = "com.trepidity.good"
         minSdk = 33       // Wear OS 4+; the OnePlus Watch 2R runs Wear OS 5 (Android 14)
         targetSdk = 35    // Play's Wear OS requirement from Aug 31, 2026
-        versionCode = 1001
-        versionName = "0.1.0-m0"
+        versionCode = 1004
+        versionName = "0.4.0"
     }
 
     buildTypes {
@@ -39,6 +39,7 @@ dependencies {
     implementation(project(":core:wake"))
     implementation(project(":core:sync"))
     implementation(project(":core:ring"))
+    implementation(project(":core:lcd"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -52,4 +53,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.coroutines.guava)
+    implementation(libs.wear.tiles)
+    implementation(libs.wear.protolayout)
+    implementation(libs.wear.protolayout.material)
+    implementation(libs.wear.protolayout.expression)
+    implementation(libs.wear.complications.data.source.ktx)
 }

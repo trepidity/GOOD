@@ -3,6 +3,8 @@ package com.trepidity.good.wear
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.os.UserManager
+import com.trepidity.good.wear.alarm.WatchScheduleStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,6 +20,12 @@ class WearApplication : Application() {
                 enableVibration(false) // HapticRamp drives the motor
             }
         )
+        // Components run before first unlock too (direct boot); the stores are device-protected, but prime them
+        // only once the user is unlocked so nothing here ever reaches for credential-encrypted storage.
+        if (getSystemService(UserManager::class.java).isUserUnlocked) {
+            WatchScheduleStore.load(this)
+            WatchScheduleStore.summary(this)
+        }
     }
 
     companion object {

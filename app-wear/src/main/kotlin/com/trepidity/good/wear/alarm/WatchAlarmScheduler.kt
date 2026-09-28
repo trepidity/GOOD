@@ -6,26 +6,29 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.trepidity.good.model.Device
+import com.trepidity.good.model.InstanceState
 import com.trepidity.good.model.ScheduleEntry
 import com.trepidity.good.model.ScheduleSnapshot
 import com.trepidity.good.wake.WakePlanner
 import com.trepidity.good.wear.MainActivity
 import java.time.Instant
 
-/** setAlarmClock() at the watch's first stage (haptics, T−3) plus a backup at T. */
+/** setAlarmClock() at the watch's first stage (haptics, T−3) plus a backup at T. Request codes are per channel. */
 object WatchAlarmScheduler {
     private const val TAG = "GoodWatchScheduler"
+    private val CHANNELS = 0L..4L
 
     fun canScheduleExact(context: Context) = alarmManager(context).canScheduleExactAlarms()
 
     fun schedule(context: Context, entry: ScheduleEntry): Boolean {
-        if (entry.instance.state.isTerminal) return false
+        if (entry.instance.state != InstanceState.SCHEDULED) return false
         val fireAt = Instant.ofEpochMilli(entry.instance.scheduledAtEpochMs)
         val plan = WakePlanner.plan(fireAt, entry.profile, Device.WATCH, entry.soundTarget, watchAvailable = true)
         val first = maxOf(WakePlanner.firstStageAt(plan) ?: fireAt, Instant.now().plusSeconds(5))
+        val channel = entry.instance.alarmId
         return try {
-            setClock(context, first, code(entry.instance.id, 0), entry.instance.id)
-            if (fireAt.isAfter(first)) setClock(context, fireAt, code(entry.instance.id, 1), entry.instance.id)
+            setClock(context, first, code(channel, 0), entry.instance.id)
+            if (fireAt.isAfter(first)) setClock(context, fireAt, code(channel, 1), entry.instance.id) else cancelSlot(context, channel, 1)
             true
         } catch (e: SecurityException) {
             Log.w(TAG, "Exact alarm refused", e)
@@ -33,33 +36,44 @@ object WatchAlarmScheduler {
         }
     }
 
-    /** Replace everything scheduled from [old] with [new]. */
-    fun apply(context: Context, old: ScheduleSnapshot?, new: ScheduleSnapshot) {
-        old?.entries?.forEach { cancel(context, it.instance.id) }
+    /** Registers exactly what [snapshot] says is pending; every other channel is cleared. */
+    fun apply(context: Context, snapshot: ScheduleSnapshot) {
         val now = System.currentTimeMillis()
-        new.entries.filter { it.instance.scheduledAtEpochMs > now }.forEach { schedule(context, it) }
+        val pending = snapshot.entries
+            .filter { it.instance.state == InstanceState.SCHEDULED && it.instance.scheduledAtEpochMs > now - 60_000 }
+            .associateBy { it.instance.alarmId }
+        for (channel in CHANNELS) {
+            val e = pending[channel]
+            if (e == null) cancelChannel(context, channel) else schedule(context, e)
+        }
     }
 
-    fun cancel(context: Context, instanceId: String) {
-        for (slot in 0..1) {
-            PendingIntent.getBroadcast(
-                context, code(instanceId, slot), intent(context, instanceId),
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-            )?.let { alarmManager(context).cancel(it) }
+    fun cancelChannel(context: Context, channel: Long) {
+        cancelSlot(context, channel, 0)
+        cancelSlot(context, channel, 1)
+    }
+
+    private fun cancelSlot(context: Context, channel: Long, slot: Int) {
+        PendingIntent.getBroadcast(
+            context, code(channel, slot), Intent(context, WatchAlarmReceiver::class.java),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+        )?.let {
+            alarmManager(context).cancel(it)
+            it.cancel()
         }
     }
 
     private fun setClock(context: Context, at: Instant, code: Int, instanceId: String) {
-        val op = PendingIntent.getBroadcast(context, code, intent(context, instanceId), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val op = PendingIntent.getBroadcast(
+            context, code, Intent(context, WatchAlarmReceiver::class.java).putExtra(WatchAlarmReceiver.EXTRA_INSTANCE_ID, instanceId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val show = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         alarmManager(context).setAlarmClock(AlarmManager.AlarmClockInfo(at.toEpochMilli(), show), op)
         Log.i(TAG, "setAlarmClock $instanceId at $at")
     }
 
-    private fun intent(context: Context, instanceId: String) =
-        Intent(context, WatchAlarmReceiver::class.java).putExtra(WatchAlarmReceiver.EXTRA_INSTANCE_ID, instanceId)
-
-    private fun code(instanceId: String, slot: Int) = instanceId.hashCode() * 2 + slot
+    private fun code(channel: Long, slot: Int) = (channel * 2 + slot).toInt()
 
     private fun alarmManager(context: Context) = context.getSystemService(AlarmManager::class.java)
 }

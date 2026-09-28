@@ -66,7 +66,7 @@ class AlarmRepository(private val context: Context, private val db: GoodDatabase
         val previous = db.instances().get(instance.id)?.toModel()
         if (previous != null && previous.state.isTerminal) return
         db.instances().upsert(InstanceEntity.of(instance))
-        if (instance.state.isTerminal && instance.alarmId != 0L) {
+        if (instance.state.isTerminal && instance.alarmId > 0) {
             val alarm = db.alarms().get(instance.alarmId)?.toModel()
             if (alarm != null && alarm.repeatDays == 0 && alarm.enabled) db.alarms().upsert(AlarmEntity.of(alarm.copy(enabled = false)))
         }
@@ -107,7 +107,8 @@ class AlarmRepository(private val context: Context, private val db: GoodDatabase
             entries += ScheduleEntry(active, profile, alarm.soundTarget, alarm.label.ifBlank { "AL${alarm.id}" }, alarm.tone)
         }
 
-        // Keep a pending or ringing CHK test alarm (channel 0), which lives only in the snapshot.
+        // Keep a pending or ringing CHK test alarm (channel 0), which lives only in the snapshot. Previews
+        // (channel −1) are dropped here, so they never reach the watch.
         val tests = ScheduleStore.load(context)?.entries.orEmpty().filter {
             it.instance.alarmId == 0L && !it.instance.state.isTerminal && it.instance.scheduledAtEpochMs > now.toEpochMilli() - 30 * 60_000
         }
@@ -132,7 +133,7 @@ class AlarmRepository(private val context: Context, private val db: GoodDatabase
     private suspend fun reconcileFromStore() {
         val snap = ScheduleStore.load(context) ?: return
         for (entry in snap.entries) {
-            if (entry.instance.alarmId == 0L) continue
+            if (entry.instance.alarmId <= 0L) continue
             val stored = db.instances().get(entry.instance.id)?.toModel()
             if (stored == null || rank(entry.instance.state) > rank(stored.state)) markInstance(entry.instance)
         }

@@ -3,6 +3,10 @@
     <style name="Theme.Good.Wear" parent="android:Theme.DeviceDefault">
         <item name="android:windowBackground">@android:color/black</item>
     </style>
+    <!-- Sideways swipes on the LCD are MODE; a rightward swipe on ALM closes the app instead. -->
+    <style name="Theme.Good.Wear.Lcd">
+        <item name="android:windowSwipeToDismiss">false</item>
+    </style>
     <!-- The ringing screen must not close on the system swipe: dismiss is GOOD's own 2-second hold. -->
     <style name="Theme.Good.Wear.Ring">
         <item name="android:windowSwipeToDismiss">false</item>

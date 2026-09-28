@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -93,7 +95,8 @@ fun Instrument(model: InstrumentModel) {
                 palette,
                 Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .weight(1f, fill = false)
+                    .aspectRatio(0.78f)
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragStart = { drag = 0f },
@@ -113,7 +116,7 @@ fun Instrument(model: InstrumentModel) {
                     if (holdProgress > 0f) SegmentBar(holdProgress, 20, palette, Modifier.fillMaxWidth().height(10.dp))
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.weight(0.01f).heightIn(min = 14.dp))
             CaseButton("LIGHT", palette, onClick = model::light, modifier = Modifier.width(150.dp))
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
@@ -198,6 +201,13 @@ private fun ColumnScope.AlmFace(model: InstrumentModel, s: UiState, palette: Lcd
         else -> Line("SET ${field.code}", palette, 20.dp)
     }
     if (field == null && a.repeatDays == 0 && a.enabled) Line("ONCE", palette, 14.dp)
+    Spacer(Modifier.weight(1f))
+    // All four channels at a glance, like the alarm list a real watch never had room for.
+    (1L..4L).forEach { ch ->
+        val c = if (ch == s.channel) a else model.alarm(ch)
+        val mark = if (ch == s.channel) "*" else " "
+        Line("${mark}AL$ch ${if (c.enabled) "%2d:%02d".format(c.hour, c.minute) else "--:--"} ${if (c.enabled) daysShort(c.repeatDays) else "OFF"}", palette, 15.dp)
+    }
     Glyphs(palette, armed = a.enabled, linked = s.checks.firstOrNull { it.id == CheckId.LINK }?.ok == true,
         tracking = s.checks.any { (it.id == CheckId.HC || it.id == CheckId.ACT) && it.ok }, oh = false)
 }
@@ -210,6 +220,14 @@ private fun Glyphs(palette: LcdPalette, armed: Boolean, linked: Boolean, trackin
         LcdGlyph(Glyph.MOON, tracking, palette, Modifier.size(26.dp))
         LcdGlyph(Glyph.OH, oh, palette, Modifier.size(26.dp))
     }
+}
+
+private fun daysShort(mask: Int): String = when (mask) {
+    0 -> "ONCE"
+    0b1111111 -> "DAILY"
+    0b0011111 -> "WKDAY"
+    0b1100000 -> "WKEND"
+    else -> "MTWTFSS".mapIndexed { i, c -> if (mask and (1 shl i) != 0) c else '-' }.joinToString("")
 }
 
 private fun hm(min: Int?) = min?.let { "${it / 60}:${"%02d".format(it % 60)}" } ?: "-:--"

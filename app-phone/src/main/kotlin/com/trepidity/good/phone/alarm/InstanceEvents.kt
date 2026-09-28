@@ -21,9 +21,10 @@ object InstanceEvents {
         val app = context.applicationContext as GoodApplication
         app.appScope.launch {
             val repo = AppGraph.alarms(app)
-            if (instance.alarmId != 0L) repo.markInstance(instance)
+            if (instance.alarmId > 0) repo.markInstance(instance)
             if (instance.state.isTerminal) {
-                if (instance.state == InstanceState.DISMISSED) {
+                // Only real alarms stamp a wake time; a CHK test alarm says nothing about sleep.
+                if (instance.state == InstanceState.DISMISSED && instance.alarmId > 0) {
                     AppGraph.sleep(app).onWake(Instant.ofEpochMilli(instance.dismissedAtEpochMs ?: System.currentTimeMillis()))
                 }
                 repo.rescheduleAll("instance ${instance.state}")

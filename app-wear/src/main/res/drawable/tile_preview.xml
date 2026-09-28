@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tile picker preview: the grey-green LCD strip with two readouts over the BED button. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path android:fillColor="#FF000000" android:pathData="M96,0A96,96 0,1 1,96,192A96,96 0,1 1,96,0Z" />
+    <path android:fillColor="#FFA7B39A" android:pathData="M42,52h108a12,12 0,0 1,12 12v36a12,12 0,0 1,-12 12h-108a12,12 0,0 1,-12 -12v-36a12,12 0,0 1,12 -12Z" />
+    <path android:fillColor="#FF1B2116" android:pathData="M44,64h28v10h-28Z M80,64h62v10h-62Z M44,88h28v10h-28Z M80,88h48v10h-48Z" />
+    <path android:fillColor="#FF2B2E2A" android:pathData="M78,124h36a16,16 0,0 1,0 32h-36a16,16 0,0 1,0 -32Z" />
+    <path android:fillColor="#FFC4C9BD" android:pathData="M82,137h28v6h-28Z" />
+</vector>
