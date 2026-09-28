@@ -44,10 +44,11 @@ class HapticRamp(context: Context) {
 
     val hasAmplitudeControl: Boolean get() = vibrator.hasAmplitudeControl()
 
-    fun start(rampMs: Long) {
+    /** [elapsedMs] > 0 resumes a ramp that should have started that long ago (late start after a reboot). */
+    fun start(rampMs: Long, elapsedMs: Long = 0) {
         stop()
         this.rampMs = rampMs.coerceAtLeast(1)
-        startedAt = SystemClock.elapsedRealtime()
+        startedAt = SystemClock.elapsedRealtime() - elapsedMs.coerceAtLeast(0)
         running = true
         handler.post(tick)
     }

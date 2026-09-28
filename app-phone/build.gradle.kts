@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -15,8 +17,8 @@ android {
         applicationId = "com.trepidity.good"
         minSdk = 34 // OnePlus 12 on OxygenOS 16 (Android 16); no need to support older phones
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-m0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildTypes {
@@ -32,6 +34,8 @@ android {
     buildFeatures { compose = true }
 }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
 dependencies {
@@ -39,6 +43,8 @@ dependencies {
     implementation(project(":core:wake"))
     implementation(project(":core:sync"))
     implementation(project(":core:ring"))
+    implementation(project(":core:lcd"))
+    implementation(project(":core:sleep"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -53,6 +59,13 @@ dependencies {
     implementation(libs.health.connect.client)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
+
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.fragment.ktx) // registerForActivityResult needs ≥ 1.3; Play services pulls an older one
+    implementation(libs.play.services.location)
 
     testImplementation(libs.junit)
 }

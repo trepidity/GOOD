@@ -1,4 +1,4 @@
-package com.trepidity.good.phone.spike
+package com.trepidity.good.phone
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

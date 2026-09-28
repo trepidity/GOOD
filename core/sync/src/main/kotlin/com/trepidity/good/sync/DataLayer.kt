@@ -52,3 +52,17 @@ object SyncCodec {
 fun instanceIdFromStatePath(path: String?): String? =
     path?.takeIf { it.startsWith(DataLayerPaths.INSTANCE_PREFIX) && it.endsWith("/state") }
         ?.removePrefix(DataLayerPaths.INSTANCE_PREFIX)?.removeSuffix("/state")
+
+object ScheduleMerge {
+    /**
+     * The watch's view of a new snapshot: the phone's entries, except that an occurrence the watch already
+     * closed (dismissed or silenced here) stays closed. Otherwise a snapshot sent before the phone heard of the
+     * watch's dismiss would re-arm the backup alarm at T (REVIEW R4).
+     */
+    fun merge(incoming: ScheduleSnapshot, local: ScheduleSnapshot?): ScheduleSnapshot {
+        val closedHere = local?.entries.orEmpty().filter { it.instance.state.isTerminal }.associateBy { it.instance.id }
+        return incoming.copy(entries = incoming.entries.map { e ->
+            if (e.instance.state.isTerminal) e else closedHere[e.instance.id]?.let { e.copy(instance = it.instance) } ?: e
+        })
+    }
+}
