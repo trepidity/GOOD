@@ -57,6 +57,7 @@ The existing bed control becomes a two-state toggle, like a stopwatch's start/st
 | `BED` | `GOOD NIGHT` | `BED` | Records a BED anchor (as today) |
 | `UP` | `GOOD MORNING` | `UP` | Records a WAKE anchor and closes today's targets (below) |
 
+- **Visible state:** the phone's SLP face shows what SET will log (`SET GOOD NIGHT` / `SET GOOD MORNING`, a small line under BED/UP, hidden while editing or while a banner shows). The watch's SLP title row shows `BED` or `UP` next to `SLP`, hidden while a message flashes.
 - **State rule:** `UP` when the latest BED anchor falls in the current night window (18:00–14:00, `NightWindow`) and no WAKE anchor follows it. Otherwise `BED`. So in the 14:00–18:00 gap it always shows `BED`, and a bed press left from days ago doesn't leave it stuck on `UP`.
 - **Targets** (`imUpTargets`): every non-terminal occurrence due **today before 14:00** local, on any channel, **including one already in its stages**. Pressing at 22:00 therefore never touches tomorrow's alarm.
 - Each target is closed as **`DISMISSED`** with `dismissedAt` = press time and `dismissedOn` = the pressing device. This is a dismiss before ringing: it stops running stages on both devices, and a one-shot channel disarms, exactly as a normal dismiss does.

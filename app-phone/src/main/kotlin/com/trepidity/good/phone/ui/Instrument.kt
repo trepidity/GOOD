@@ -275,6 +275,8 @@ private fun ColumnScope.SlpFace(model: InstrumentModel, s: UiState, palette: Lcd
         val up = session?.let { clock(it.end) } ?: "--:--"
         Line("BED $bed  UP $up", palette, 18.dp)
         wakeLines[wakeDate.toString()]?.let { Line(it, palette, 16.dp) }
+        // What SET will log now: GOOD NIGHT starts the night, GOOD MORNING (I'M UP) ends it.
+        if (s.banner == null) Line(if (s.sleepAction == SleepAction.UP) "SET GOOD MORNING" else "SET GOOD NIGHT", palette, 14.dp)
     } else {
         val (label, value) = when (edit.field) {
             SlpField.BED -> "BED" to clock(edit.bed.toEpochMilli())

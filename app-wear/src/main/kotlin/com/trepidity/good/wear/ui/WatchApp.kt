@@ -193,9 +193,10 @@ fun WatchApp(resumes: Int, onExit: () -> Unit) {
         Mode.CHK -> chkResult != null && (chkResult.ok != true || chkItem == CheckItem.LINK || chkItem == CheckItem.BODY)
         else -> true
     }
+    val sleepAction = if (mode == Mode.SLP) WatchScheduleStore.sleepAction(context) else null
     val setLabel = when (mode) {
         Mode.ALM -> "Arm or disarm alarm $channel"
-        Mode.SLP -> if (WatchScheduleStore.sleepAction(context) == SleepAction.UP) "Log wake-up now" else "Log bedtime now"
+        Mode.SLP -> if (sleepAction == SleepAction.UP) "Log wake-up now" else "Log bedtime now"
         Mode.PRO -> null
         Mode.CHK -> if (holdEnabled) if (chkResult?.ok == null) "Start or stop test" else "Fix or recheck" else null
     }
@@ -266,6 +267,7 @@ fun WatchApp(resumes: Int, onExit: () -> Unit) {
                     bedWake = if (bed != null && wake != null) "${WatchFormat.clock(context, bed)}-${WatchFormat.clock(context, wake)}" else null,
                     goal = sum?.let { "GOAL ${WatchFormat.hoursMinutes(it.goalMin)}" } ?: "",
                     fromHealthConnect = sum?.fromHealthConnect == true,
+                    action = if (sleepAction == SleepAction.UP) "UP" else "BED",
                     message = message,
                 )
             }

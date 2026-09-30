@@ -141,11 +141,16 @@ fun AlarmBody(s: Dp, p: LcdPalette, channel: String, time: String, meridiem: Str
     )
 }
 
+/** [action] is what a SET hold logs now ("BED" or "UP"); it's hidden while a [message] flashes. */
 @Composable
-fun SleepBody(s: Dp, p: LcdPalette, total: String, bedWake: String?, goal: String, fromHealthConnect: Boolean, message: String?) {
+fun SleepBody(s: Dp, p: LcdPalette, total: String, bedWake: String?, goal: String, fromHealthConnect: Boolean, action: String, message: String?) {
     Slots(
         s,
-        title = { h -> Seg("SLP", h, p); LcdGlyph(Glyph.OH, fromHealthConnect, p, Modifier.size(h * 1.3f)) },
+        title = { h ->
+            Seg("SLP", h, p)
+            LcdGlyph(Glyph.OH, fromHealthConnect, p, Modifier.size(h * 1.3f))
+            Seg(if (message == null) action else " ".repeat(action.length), h, p)
+        },
         big = { h -> if (message != null) Seg(message, h * 0.42f, p) else Seg(total, h, p, SegmentKind.SEVEN) },
         line = { h -> if (bedWake != null) Seg(bedWake, h, p, SegmentKind.SEVEN) else Seg("NO DATA", h, p) },
         small = { h -> Seg(goal, h, p) },
