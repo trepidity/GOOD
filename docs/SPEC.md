@@ -1,6 +1,6 @@
 # GOOD Alarm — Design & Build Spec
 
-As of 2026-09-27 · Jared · Living copy: the Claude doc "GOOD Alarm — Design & Build Spec" · Revised after the review in [REVIEW.md](REVIEW.md) (finding IDs in brackets)
+As of 2026-09-30 · Jared · Living copy: the Claude doc "GOOD Alarm — Design & Build Spec" · Revised after the review in [REVIEW.md](REVIEW.md) (finding IDs in brackets)
 
 ## Overview & goals
 
@@ -31,6 +31,8 @@ V1 covers alarms, the staged wake-up and automatic sleep logging; smart-window w
 | F10 | Watch tile and complication showing next alarm and last night's sleep | Should |
 | F11 | Smart wake window: fire within the last 20 min before the alarm when light sleep is detected | Later |
 | F12 | Sleep stages (light/deep/REM) from watch heart-rate data | Later |
+| F13 | Skip the next occurrence of a repeating alarm without affecting sleep tracking | Should |
+| F14 | I'M UP: the bed button toggles to GOOD MORNING, which records the wake time and closes this morning's alarms | Should |
 
 **Non-functional**
 
@@ -91,11 +93,12 @@ The phone is the source of truth; every edit pushes a new schedule snapshot to t
 | Data Layer path | Type | Direction | Payload |
 | --- | --- | --- | --- |
 | `/schedule` | DataItem | phone → watch | All enabled alarms with next fire time and wake profile, plus a version number |
-| `/instance/{id}/state` | DataItem | both ways | Current state of a firing alarm (ringing, dismissed, silenced) with a timestamp |
-| `/cmd/dismiss` | Message | both ways | Instance id; the receiver stops its stages within 2 s |
+| `/instance/{id}/state` | DataItem | both ways | Current state of a firing alarm (ringing, dismissed, silenced, cancelled) with a timestamp |
+| `/cmd/dismiss` | Message | both ways | Instance id and `Command.state` (the closing state, default DISMISSED; CANCELLED when the channel was edited or disarmed); the receiver stops its stages within 2 s |
 | `/sleep/bedtime` | Message | watch → phone | Time the bed button was pressed |
+| `/sleep/wake` | Message | watch → phone | Time I'M UP was pressed on the watch; the phone records a WAKE anchor |
 | `/sleep/signal` | Message | watch → phone | Asleep/awake transition from Health Services passive monitoring [U8] |
-| `/sleep/summary` | DataItem | phone → watch | Last night's total, bed and wake times, goal, source; feeds the tile and complications [U7] |
+| `/sleep/summary` | DataItem | phone → watch | Last night's total, bed and wake times, goal, source, plus the latest BED and WAKE anchor times that drive the watch's BED/UP toggle; feeds the tile and complications [U7] |
 | `/cmd/toggle` | Message | watch → phone | Arm or disarm a channel from the watch [U6] |
 | `/health` | Message | phone → watch | Ping when the phone's first stage starts (T−10), to confirm the watch is reachable and worn; the reply (`/health/reply`) carries the off-body state [R8] |
 
@@ -158,8 +161,9 @@ GOOD records one sleep session per night by merging up to four sources, preferri
 **How a session is built**
 
 1. Each night window runs 18:00 to 14:00 the next day and belongs to the wake date.
-2. On dismiss, GOOD writes a provisional session: start = bed-button time (or first asleep signal), end = dismiss time.
-3. A WorkManager job runs at dismiss +30 min, +2 h and at 11:00. It reads Health Connect sleep sessions overlapping the window; one from another app replaces the provisional values and is tagged with its source.
+2. On dismiss or I'M UP, GOOD writes a provisional session: start = bed-button time (or first asleep signal), end = dismiss or I'M UP time.
+2a. A night whose alarm was skipped and has no I'M UP ends at the first phone unlock or watch "awake" after the skipped time, if under 24 h (#1). The unlock times need Usage access (CHK → USE); without it only watch "awake" samples count. The inferred time is used for that build only, so a later Health Connect session or an I'M UP press still wins.
+3. A WorkManager job runs at dismiss +30 min, +2 h and at 11:00, and a daily pass at 11:00 also rebuilds the last two nights (enqueued at app start and after every wake anchor). It reads Health Connect sleep sessions overlapping the window; one from another app replaces the provisional values and is tagged with its source.
 4. With no Health Connect session, GOOD derives one from sources 2–3: sleep onset = start of the first 20-min asleep run; wake = last asleep sample before dismiss; an awakening = an awake run of 5 min or more.
 5. Only sessions GOOD built itself are written back to Health Connect, so OHealth's data is never duplicated.
 6. You can edit start and end by hand; edited sessions are marked and never overwritten by later syncs.
@@ -170,7 +174,7 @@ GOOD records one sleep session per night by merging up to four sources, preferri
 - Sleep onset latency (bed button → asleep) and number of awakenings
 - Sleep debt against your goal over the last 7 nights
 - Bedtime consistency: spread of bedtimes over 14 nights, in minutes
-- Wake behaviour: stage at which you dismissed, minutes from first stage to dismiss
+- Wake behaviour: on the SLP lap for a morning, the stage you dismissed in and the minutes after the first stage (`WOKE SND +6`); `UP EARLY` when I'M UP closed it before any stage; `SKIPPED`; `NO ANSWER` when auto-silence ended it. An occurrence cancelled by an edit or disarm has no line (#7)
 
 Sleep stages are displayed only when OHealth provides them; GOOD does not compute its own stages in v1 (F12).
 
@@ -200,10 +204,10 @@ Every screen is the same instrument in a different mode, so there is nothing to 
 
 | Mode | LCD shows | ▲ / ▼ | SET |
 | --- | --- | --- | --- |
-| ALM · Alarm | Next alarm in big digits, channel (AL1–AL4), lit weekday segments, "IN 7:20 · GENTLE" | Switch channel AL1 → AL4 | Edit: hour flashes → minute → days → profile → tone (CHIME / CLASSIC) → sound target (AUTO / PHONE / WATCH / BOTH) [U3]; hold SET 2 s to arm or disarm |
-| SLP · Sleep | Last night's total ("7:42") as a chrono readout, bed → wake, a 7-night LCD bar graph, OH glyph when the data came from OHealth; 7- and 30-day averages, debt and bedtime spread on a second line | Recall LAP 01 → LAP 30 (one lap per night) | Log bedtime now ("GOOD NIGHT" scrolls across); hold SET 2 s to edit the shown night: BED → WAKE → GOAL → REMIND on/off [U5] |
+| ALM · Alarm | Next alarm in big digits, channel (AL1–AL4), lit weekday segments, "IN 7:20 · GENTLE" | Switch channel AL1 → AL4; hold ▼ 2 s: skip or unskip the next occurrence (banner `SKIPPED` / `UNSKIP`) | Edit: hour flashes → minute → days → profile → tone (CHIME / CLASSIC) → sound target (AUTO / PHONE / WATCH / BOTH) [U3]; hold SET 2 s to arm or disarm |
+| SLP · Sleep | Last night's total ("7:42") as a chrono readout, bed → wake, a 7-night LCD bar graph, OH glyph when the data came from OHealth; the wake line under BED / UP (`WOKE SND +6`, `UP EARLY`, `SKIPPED`, `NO ANSWER`); 7- and 30-day averages, debt and bedtime spread on a second line | Recall LAP 01 → LAP 30 (one lap per night) | Log bedtime now (GOOD NIGHT), or after it, the wake time (GOOD MORNING, I'M UP). The watch's SLP flashes MORNING (GOOD MORNING doesn't fit inside the ring ticks); the tile shows GOOD / MORNING. Hold SET 2 s to edit the shown night: BED → WAKE → GOAL → REMIND on/off [U5] |
 | PRO · Profile | The wake profile as an interval timer: P1 GENTLE, INT 1 LIGHT 10:00, INT 2 BUZZ 3:00, INT 3 TONE 5:00, INT 4 FULL +5:00, SIL 20 | Step through rows (first row picks the profile P1–P3) [U4] | Edit the flashing row; hold SET 2 s for the 60-s preview |
-| CHK · Check | Self-test like a watch's segment test: ALM, FSI, NTF, BAT, VOL, LINK, HC each show a check or blink; then TST and EXP [U9, U10] | Step through items | Open the fix for the blinking item; on TST, set a real test alarm at +3 min on both devices; on EXP, export all data as JSON |
+| CHK · Check | Self-test like a watch's segment test: ALM, FSI, NTF, BAT, VOL, LINK, HC, USE each show a check or blink; then TST and EXP [U9, U10] | Step through items | Open the fix for the blinking item; on TST, set a real test alarm at +3 min on both devices; on EXP, export all data as JSON |
 
 **Ringing**
 
@@ -236,7 +240,7 @@ The phone keeps everything in one Room database; the watch keeps only a snapshot
 | `Alarm` | id (channel 1–4), hour, minute, repeatDays (bitmask), label, enabled, profileId, tone (CHIME / CLASSIC), soundTarget (AUTO / PHONE / WATCH / BOTH; AUTO = watch when worn and reachable, else phone), skipNextDate | Source of truth for the schedule |
 | `WakeProfile` | id, name, stages (JSON list of `Stage`), autoSilenceMinutes (no snooze fields) | Presets seeded on first launch |
 | `Stage` | type (LIGHT / HAPTIC / SOUND / ESCALATE), device, offsetSec (relative to T), rampSec, params | Embedded in `WakeProfile` |
-| `AlarmInstance` | id, alarmId, scheduledAt (UTC), state (SCHEDULED / FIRING / DISMISSED / SILENCED / SKIPPED), currentStage, dismissedAt, dismissedOn (PHONE / WATCH) | One row per occurrence; drives the state machine and the wake metrics |
+| `AlarmInstance` | id, alarmId, scheduledAt (UTC), state (SCHEDULED / FIRING / DISMISSED / SILENCED / SKIPPED / CANCELLED), currentStage, firstStageAt, dismissedAtStage, dismissedAt, dismissedOn (PHONE / WATCH) | One row per occurrence; drives the state machine and the wake metrics. SKIPPED is written by SKIP only; I'M UP closes occurrences as DISMISSED before ringing; CANCELLED means the channel was edited or disarmed |
 | `SleepSession` | id, wakeDate, start, end, source (HEALTH_CONNECT / WATCH / PHONE / ANCHORS), sourcePackage, edited, healthConnectId | One per night |
 | `SleepSegment` | sessionId, start, end, kind (ASLEEP / AWAKE / LIGHT / DEEP / REM) | Stages only when the source provides them |
 | `SleepSignal` | timestamp, source, confidence, motion, light | Raw phone and watch samples; pruned after 14 days |
@@ -261,6 +265,7 @@ The phone keeps everything in one Room database; the watch keeps only a snapshot
 | `health.READ_SLEEP`, `health.WRITE_SLEEP` | Phone | Read OHealth sessions, write GOOD's own | Health Connect consent screen |
 | `health.READ_HEALTH_DATA_IN_BACKGROUND` | Phone | Sleep sync jobs read Health Connect after dismiss and at 11:00 [P1] | Health Connect consent screen |
 | `health.READ_HEALTH_DATA_HISTORY` | Phone | One-time import of sleep older than 30 days | Health Connect consent screen (optional) |
+| `PACKAGE_USAGE_STATS` | Phone | Unlock times for a skipped night's wake | Settings → Usage access (CHK → USE) |
 
 **Reliability rules**
 

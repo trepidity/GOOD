@@ -5,6 +5,7 @@ import com.trepidity.good.model.Device
 import com.trepidity.good.model.InstanceState
 import com.trepidity.good.model.StageType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** Gate: #7 — the wake-behaviour metric, with I'M UP's early dismisses shown apart. */
@@ -25,5 +26,14 @@ class WakeBehaviourTest {
     fun `a dismiss before any stage is up early`() {
         val i = base.copy(state = InstanceState.DISMISSED, dismissedAtEpochMs = t - 3_600_000, dismissedOn = Device.WATCH)
         assertEquals(WakeBehaviour.UpEarly, WakeBehaviour.of(i))
+    }
+
+
+    /** Gate: #7 — skips and missed alarms are reported; a CANCELLED edit stays out of the metric. */
+    @Test
+    fun `skipped and silenced are reported and cancelled is left out`() {
+        assertEquals(WakeBehaviour.Skipped, WakeBehaviour.of(base.copy(state = InstanceState.SKIPPED)))
+        assertEquals(WakeBehaviour.NoAnswer, WakeBehaviour.of(base.copy(state = InstanceState.SILENCED)))
+        assertNull(WakeBehaviour.of(base.copy(state = InstanceState.CANCELLED)))
     }
 }

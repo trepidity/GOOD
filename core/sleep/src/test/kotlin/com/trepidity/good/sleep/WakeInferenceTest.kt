@@ -27,4 +27,11 @@ class WakeInferenceTest {
         val longWindow = NightWindow(window.wakeDate, window.start, at("2026-10-02T12:00"))
         assertNull(WakeInference.infer(skipped, listOf(at("2026-10-01T23:00")), bed, longWindow))
     }
+
+
+    /** Gate: #1 — "at or after" the skipped alarm time: an unlock in the same minute is the wake. */
+    @Test
+    fun `a candidate exactly at the skipped alarm time is the wake`() {
+        assertEquals(skipped, WakeInference.infer(skipped, listOf(skipped, at("2026-10-01T09:10")), bed, window))
+    }
 }

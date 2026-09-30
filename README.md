@@ -138,7 +138,7 @@ Watch: tap the top or bottom half for ▲ / ▼, swipe sideways for MODE, hold 2
 
 | # | Check | Pass |
 | --- | --- | --- |
-| 1 | CHK on the phone: ALM FSI NTF BAT VOL LINK HC ACT | All OK (LINK needs the watch nearby) |
+| 1 | CHK on the phone: ALM FSI NTF BAT VOL LINK HC USE ACT | All OK (LINK needs the watch nearby) |
 | 2 | CHK on the watch: EXA FSI **SCR** NTF BODY LINK ACT | All OK |
 | 3 | CHK → TST with the phone locked and the screen off | Phone light ramp, then watch buzz, then sound on the watch at +3 min |
 | 4 | Dismiss the test on the watch (hold 2 s) | Phone stops within 2 s |
@@ -150,8 +150,17 @@ Watch: tap the top or bottom half for ▲ / ▼, swipe sideways for MODE, hold 2
 | 10 | Every button press registers | No missed taps (the emulator dropped a few, see below) |
 | 11 | Next morning: SLP | A session for last night; OH badge once OHealth has synced |
 | 12 | Watch tile and complications | `AL1 6:30`, `SLP 7:42`; BED logs a bedtime |
+| 13 | ALM → hold ▼ on a weekday channel | `SKIP <day>`; watch ALM shows the following day |
+| 14 | Hold ▼ again | Skip cleared on both devices |
+| 15 | Set AL1 for +15 min, SLP → GOOD NIGHT, then GOOD MORNING before it rings | No ring on either device; SLP shows the wake time as the press time and `UP EARLY` |
+| 16 | As 15, but press UP on the watch with the phone's Bluetooth off | Watch doesn't buzz; after reconnecting, the phone's alarm is closed (if not yet rung) |
+| 17 | Skip tomorrow's alarm; next day, don't open the app until after 11:00 | Session present with the OH badge (if OHealth synced), or ending at your first unlock after the alarm time |
+| 18 | Set AL1 for +11 min (Gentle). Once the phone's sunrise starts, ALM → hold SET to disarm AL1 | Sunrise stops at once; the watch doesn't buzz at T−3 |
+| 19 | Next morning after a normal dismiss: SLP | `WOKE <stage> +<min>` under BED/UP |
+| 20 | Install this build over the previous one (don't uninstall) | Alarms, history and sleep nights are all still there |
 
 Known limits from the emulator run:
+- Install the phone and watch apps together: an older app can't read the new CANCELLED state.
 - Taps sometimes landed during the emulator's roughly 1-second software-rendered frames right after launch. This needs checking on the OnePlus 12 (check 10).
 - The emulators weren't paired, so nothing that crosses the Data Layer has been observed yet (checks 3–7).
 
@@ -176,4 +185,4 @@ core/lcd/    Seven- and 14-segment drawing, LCD panel, case buttons, glyphs
 ./gradlew :core:wake:test :core:sync:test :core:sleep:test :core:lcd:testDebugUnitTest
 ```
 
-Each test names the gate or review finding it protects. The tests cover schedule roll-forward, the wake-lock length, the watch merge, stage planning, DST and repeat days, profile editing limits, sleep source priority, onset and awakening thresholds, and the night window and metrics.
+Each test names the gate or review finding it protects. The tests cover schedule roll-forward, the wake-lock length, the watch merge, stage planning, DST and repeat days, profile editing limits, sleep source priority, onset and awakening thresholds, and the night window and metrics. Skip and I'M UP added tests for skip and cancel decisions, the current-occurrence rule, I'M UP targets, the BED/UP toggle, inferred wake and wake behaviour.

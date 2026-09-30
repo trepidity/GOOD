@@ -84,3 +84,16 @@ Both apps were installed on emulators and driven through every mode, a 60-second
 | F2 | Low | TST registered twice within about 2 s on both runs; the first tap probably gave too little feedback. | Harmless (the second replaces the first); feedback fix pending. |
 
 Also verified: **check 6**, the watch ringing with the phone fully cut off (airplane mode, Bluetooth and Wi-Fi off): buzz +0.6 s, sound +14 ms, escalation +7 ms. Verified on hardware: the phone–watch ping (`reachable=true worn=true`); watch dismiss reaching the phone in **546 ms** and phone dismiss stopping the watch in **1.15 s** (F4 gate: ≤ 2 s both ways); the watch's stages firing from its own schedule with `ArmedService` running; the watch ringing screen opening over the watch face with the overlay grant; the phone safety net at T+5 (+0 ms); phone dismiss waking the watch listener.
+
+## Skip next and I'M UP (2026-09-30)
+
+Design: [superpowers/specs/2026-09-30-skip-and-im-up-design.md](superpowers/specs/2026-09-30-skip-and-im-up-design.md). Issue review outcome:
+
+- **#5 and #6 fixed.** An occurrence replaced by an edit, or running when its channel is disarmed, is closed as `CANCELLED`; a running one stops on both devices.
+- **Found while planning:** a cancelled future row would have made moving an alarm earlier skip today (cancelled 7:00 row, then 6:30 rolls to tomorrow). `ScheduleBuilder.current` ignores `CANCELLED` rows to prevent that.
+- **#7 built.** Wake behaviour on the SLP lap, with I'M UP's early dismisses shown apart as `UP EARLY`.
+- **#1 decided and built.** A skipped night's wake is the first unlock or watch "awake" after the skipped time, under 24 h.
+- **#2 and #4 closed as won't do.** Automatic awake detection (I'M UP stays manual); multiple skip dates.
+- **#3 and #8 still open.** SKIP from the watch; the passive asleep state on the 2R.
+- **Watch tile:** BED/UP acts once per press, keyed by a per-render click id, so a stale tile refresh can't log a second press.
+

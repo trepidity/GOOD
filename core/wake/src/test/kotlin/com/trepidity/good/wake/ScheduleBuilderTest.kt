@@ -137,4 +137,13 @@ class ScheduleBuilderTest {
         assertEquals(t.toEpochMilli(), second.active!!.scheduledAtEpochMs)
         assertNull(second.cancelled)
     }
+
+
+    /** Gate: #6 — moving a ringing alarm to a time already past today lands tomorrow and never re-rings today. */
+    @Test
+    fun `moving a ringing alarm to a time that has passed lands tomorrow`() {
+        val d = decide(daily.copy(minute = 28), instance(InstanceState.FIRING), now = at("2026-10-01T06:25"))
+        assertEquals(InstanceState.CANCELLED, d.cancelled!!.state)
+        assertEquals(at("2026-10-02T06:28").toEpochMilli(), d.active!!.scheduledAtEpochMs)
+    }
 }

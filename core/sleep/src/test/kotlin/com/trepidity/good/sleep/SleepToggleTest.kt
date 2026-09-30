@@ -19,4 +19,12 @@ class SleepToggleTest {
 
     @Test fun `between 14 00 and 18 00 it is always BED`() =
         assertEquals(SleepAction.BED, next("2026-10-01T13:30", null, "2026-10-01T15:00"))
+
+    /** Gate: I'M UP spec state rule — yesterday's wake must not hide tonight's bed press. */
+    @Test fun `a wake from before tonight's bed press does not hide it`() =
+        assertEquals(SleepAction.UP, next("2026-09-30T23:00", "2026-09-30T07:00", "2026-10-01T05:00"))
+
+    /** Gate: I'M UP spec state rule — a wake at the same instant as the bed press closes the night. */
+    @Test fun `a wake at the same instant as the bed press shows BED`() =
+        assertEquals(SleepAction.BED, next("2026-09-30T23:00", "2026-09-30T23:00", "2026-10-01T05:00"))
 }
