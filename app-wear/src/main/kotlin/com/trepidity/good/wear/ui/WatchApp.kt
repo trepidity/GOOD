@@ -61,13 +61,17 @@ private const val PRO_ROWS = 6
 /** A transient LCD message ("SENT", "GOOD NIGHT", "MORNING") shown in [mode] for two seconds. */
 private data class Flash(val mode: Mode, val text: String)
 
+/** A request from the launching intent to show [mode]; [seq] grows per launch so a repeat launch still switches. */
+data class OpenIn(val mode: Mode, val seq: Int)
+
 /**
  * The watch app: the phone's four modes as views of its data (REVIEW U6). Tap the top half for ▲, the bottom half
  * for ▼, the mode tabs for GLOW; swipe sideways for MODE; hold 2 s for SET. A rightward swipe on ALM calls [onExit]
  * (the system swipe-to-close is off so swipes can change mode). [resumes] changes on every resume, to re-run CHK.
+ * [openIn] switches to a mode the launch asked for (the tile's UP opens SLP).
  */
 @Composable
-fun WatchApp(resumes: Int, onExit: () -> Unit) {
+fun WatchApp(resumes: Int, openIn: OpenIn?, onExit: () -> Unit) {
     val context = LocalContext.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
@@ -75,7 +79,8 @@ fun WatchApp(resumes: Int, onExit: () -> Unit) {
     val snapshot by WatchScheduleStore.snapshot.collectAsState()
     val summary by WatchScheduleStore.sleepSummary.collectAsState()
 
-    var mode by rememberSaveable { mutableStateOf(Mode.ALM) }
+    var mode by rememberSaveable { mutableStateOf(openIn?.mode ?: Mode.ALM) }
+    LaunchedEffect(openIn) { openIn?.let { mode = it.mode } }
     var channel by rememberSaveable {
         mutableIntStateOf(WatchScheduleStore.next(context)?.instance?.alarmId?.toInt()?.takeIf { it in 1..4 } ?: 1)
     }

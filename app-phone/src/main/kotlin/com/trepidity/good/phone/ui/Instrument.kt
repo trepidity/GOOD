@@ -126,7 +126,7 @@ fun Instrument(model: InstrumentModel) {
                     "SET", palette, onClick = model::set, modifier = Modifier.weight(1f),
                     onLongClick = { model.holdSet(); holdProgress = 0f },
                     onHoldProgress = { holdProgress = it },
-                    contentDescription = "Set${if (s.mode == Mode.SLP && s.slpEdit == null) if (s.sleepAction == SleepAction.UP) ": log wake-up now" else ": log bedtime now" else ""}. Hold two seconds: ${holdMeaning(s)}",
+                    contentDescription = "Set${if (s.mode == Mode.SLP && s.slpEdit == null && s.sleepAction == SleepAction.BED) ": log bedtime now" else ""}. Hold two seconds: ${holdMeaning(s)}",
                 )
                 CaseButton("▲", palette, onClick = model::up, modifier = Modifier.weight(1f), repeatOnHold = true, contentDescription = "Up")
             }
@@ -147,7 +147,11 @@ fun Instrument(model: InstrumentModel) {
 
 private fun holdMeaning(s: UiState) = when (s.mode) {
     Mode.ALM -> if (s.almEdit != null) "save" else "arm or disarm"
-    Mode.SLP -> if (s.slpEdit != null) "save" else "edit this night"
+    Mode.SLP -> when {
+        s.slpEdit != null -> "save"
+        s.sleepAction == SleepAction.UP -> "log wake-up now"
+        else -> "edit this night"
+    }
     Mode.PRO -> "sixty second preview"
     Mode.CHK -> "run the checks again"
 }
@@ -275,8 +279,8 @@ private fun ColumnScope.SlpFace(model: InstrumentModel, s: UiState, palette: Lcd
         val up = session?.let { clock(it.end) } ?: "--:--"
         Line("BED $bed  UP $up", palette, 18.dp)
         wakeLines[wakeDate.toString()]?.let { Line(it, palette, 16.dp) }
-        // What SET will log now: GOOD NIGHT starts the night, GOOD MORNING (I'M UP) ends it.
-        if (s.banner == null) Line(if (s.sleepAction == SleepAction.UP) "SET GOOD MORNING" else "SET GOOD NIGHT", palette, 14.dp)
+        // What SET will log now: a tap logs GOOD NIGHT; GOOD MORNING (I'M UP) closes the morning's alarms, so it takes a hold.
+        if (s.banner == null) Line(if (s.sleepAction == SleepAction.UP) "HOLD SET GOOD MORNING" else "SET GOOD NIGHT", palette, 14.dp)
     } else {
         val (label, value) = when (edit.field) {
             SlpField.BED -> "BED" to clock(edit.bed.toEpochMilli())

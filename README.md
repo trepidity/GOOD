@@ -149,11 +149,11 @@ Watch: tap the top or bottom half for ▲ / ▼, swipe sideways for MODE, hold 2
 | 9 | Set AL1 for a few minutes ahead, reboot the phone, **don't unlock** | Alarm still fires (direct boot) |
 | 10 | Every button press registers | No missed taps (the emulator dropped a few, see below) |
 | 11 | Next morning: SLP | A session for last night; OH badge once OHealth has synced |
-| 12 | Watch tile and complications | `AL1 6:30`, `SLP 7:42`; BED logs a bedtime |
+| 12 | Watch tile and complications | `AL1 6:30`, `SLP 7:42`; BED logs a bedtime; after it, UP opens the watch app in SLP and logs nothing |
 | 13 | ALM → hold ▼ on a weekday channel | `SKIP <day>`; watch ALM shows the following day |
 | 14 | Hold ▼ again | Skip cleared on both devices |
-| 15 | Set AL1 for +15 min, SLP → GOOD NIGHT, then GOOD MORNING before it rings | No ring on either device; SLP shows the wake time as the press time and `UP EARLY` |
-| 16 | As 15, but press UP on the watch with the phone's Bluetooth off | Watch doesn't buzz; after reconnecting, the phone's alarm is closed (if not yet rung) |
+| 15 | Set AL1 for +15 min, SLP → tap SET (GOOD NIGHT); tap SET again, then hold SET 2 s (GOOD MORNING) before it rings | The tap only shows `HOLD SET`; after the hold, no ring on either device; SLP shows the wake time as the press time and `UP EARLY` |
+| 16 | As 15, but hold SET 2 s on the watch's SLP (or tap the tile's UP, which opens it) with the phone's Bluetooth off | Watch doesn't buzz; after reconnecting, the phone's alarm is closed (if not yet rung) |
 | 17 | Skip tomorrow's alarm; next day, don't open the app until after 11:00 | Session present with the OH badge (if OHealth synced), or ending at your first unlock after the alarm time |
 | 18 | Set AL1 for +11 min (Gentle). Once the phone's sunrise starts, ALM → hold SET to disarm AL1 | Sunrise stops at once; the watch doesn't buzz at T−3 |
 | 19 | Next morning after a normal dismiss: SLP | `WOKE <stage> +<min>` under BED/UP |

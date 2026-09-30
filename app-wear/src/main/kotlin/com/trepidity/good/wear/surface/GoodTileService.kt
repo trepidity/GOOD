@@ -21,25 +21,25 @@ import com.trepidity.good.model.BedtimeMessage
 import com.trepidity.good.sleep.SleepAction
 import com.trepidity.good.sync.DataLayerPaths
 import com.trepidity.good.sync.SyncCodec
+import com.trepidity.good.wear.MainActivity
 import com.trepidity.good.wear.WatchFormat
 import com.trepidity.good.wear.WearApplication
 import com.trepidity.good.wear.alarm.WatchScheduleStore
-import com.trepidity.good.wear.sleep.WatchImUp
 import com.trepidity.good.wear.sync.WatchSync
+import com.trepidity.good.wear.ui.Mode
 import kotlinx.coroutines.launch
-import java.time.Instant
 
 /**
- * The LCD strip tile: `AL1 6:30` and `SLP 7:42` on the grey-green panel, with a BED/UP button that logs bedtime or
- * I'M UP (through the outbox, so it works out of range) and answers "GOOD NIGHT" or "GOOD MORNING" for that render.
+ * The LCD strip tile: `AL1 6:30` and `SLP 7:42` on the grey-green panel, with a BED/UP button. BED is a tap: it logs
+ * bedtime (through the outbox, so it works out of range) and answers "GOOD NIGHT" for that render. UP only opens the
+ * app in SLP: GOOD MORNING closes this morning's alarms on both devices, so it takes the app's 2 s hold, and a tile
+ * (tap only) must not be able to do it.
  */
 class GoodTileService : TileService() {
 
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> {
-        val lines = when {
-            !claimPress(requestParams.currentState.lastClickableId) -> listOf(alarmLine(), sleepLine())
-            else -> sleepButton()
-        }
+        val lines = (if (claimPress(requestParams.currentState.lastClickableId)) goodNight() else null)
+            ?: listOf(alarmLine(), sleepLine())
         val tile = TileBuilders.Tile.Builder()
             .setResourcesVersion(RESOURCES_VERSION)
             .setFreshnessIntervalMillis(30 * 60_000L)
@@ -53,7 +53,7 @@ class GoodTileService : TileService() {
 
     /**
      * True once per press. The renderer can repeat the last clicked id on later refreshes (the freshness refresh, or
-     * the update I'M UP itself requests); with a toggling button a repeat would log the opposite action. So every
+     * the update a sync requests); a repeat would log a second bedtime, possibly on a later night. So every
      * render gives the button a fresh id, and an id is acted on only the first time it arrives. It is recorded before
      * acting, and in device-protected storage so a killed process doesn't forget it.
      */
@@ -67,19 +67,19 @@ class GoodTileService : TileService() {
         return true
     }
 
-    /** Logs BED or I'M UP, whichever the toggle offers, and answers GOOD NIGHT or GOOD MORNING for this render. */
-    private fun sleepButton(): List<String> {
+    /**
+     * Logs bedtime and answers GOOD NIGHT for this render, or null (nothing logged) when the toggle now offers UP: a BED
+     * press from a render made before the night began (the phone logged bed since) must not start a second night, and
+     * the tile never logs I'M UP.
+     */
+    private fun goodNight(): List<String>? {
+        if (WatchScheduleStore.sleepAction(this) == SleepAction.UP) return null
         val now = System.currentTimeMillis()
-        return if (WatchScheduleStore.sleepAction(this) == SleepAction.UP) {
-            WatchImUp.record(this, Instant.ofEpochMilli(now))
-            listOf("GOOD", "MORNING")
-        } else {
-            WatchScheduleStore.recordLocalBed(this, now)
-            (application as WearApplication).appScope.launch {
-                WatchSync.send(this@GoodTileService, DataLayerPaths.SLEEP_BEDTIME, SyncCodec.encodeAny(BedtimeMessage(now)))
-            }
-            listOf("GOOD", "NIGHT")
+        WatchScheduleStore.recordLocalBed(this, now)
+        (application as WearApplication).appScope.launch {
+            WatchSync.send(this@GoodTileService, DataLayerPaths.SLEEP_BEDTIME, SyncCodec.encodeAny(BedtimeMessage(now)))
         }
+        return listOf("GOOD", "NIGHT")
     }
 
     private fun alarmLine(): String {
@@ -121,13 +121,12 @@ class GoodTileService : TileService() {
                             .setCorner(ModifiersBuilders.Corner.Builder().setRadius(dp(24f)).build())
                             .build(),
                     )
-                    .setClickable(
-                        ModifiersBuilders.Clickable.Builder()
-                            .setId("$CLICK_BED_PREFIX${System.currentTimeMillis()}")
-                            .setOnClick(ActionBuilders.LoadAction.Builder().build())
+                    .setClickable(if (up) openSlp() else logBed())
+                    .setSemantics(
+                        ModifiersBuilders.Semantics.Builder()
+                            .setContentDescription(if (up) "Open sleep. Hold SET two seconds to log wake-up" else "Log bedtime now")
                             .build(),
                     )
-                    .setSemantics(ModifiersBuilders.Semantics.Builder().setContentDescription(if (up) "Log wake-up now" else "Log bedtime now").build())
                     .build(),
             )
             .addContent(text(if (up) "UP" else "BED", 16f, LABEL))
@@ -149,6 +148,28 @@ class GoodTileService : TileService() {
             .build()
     }
 
+    /** BED: a fresh id per render and a reload, so [onTileRequest] sees the press once ([claimPress]). */
+    private fun logBed() = ModifiersBuilders.Clickable.Builder()
+        .setId("$CLICK_BED_PREFIX${System.currentTimeMillis()}")
+        .setOnClick(ActionBuilders.LoadAction.Builder().build())
+        .build()
+
+    /** UP: opens the app in SLP, where GOOD MORNING is the 2 s SET hold. Its id is not [CLICK_BED_PREFIX], so it logs nothing. */
+    private fun openSlp() = ModifiersBuilders.Clickable.Builder()
+        .setId(CLICK_OPEN_SLP)
+        .setOnClick(
+            ActionBuilders.LaunchAction.Builder()
+                .setAndroidActivity(
+                    ActionBuilders.AndroidActivity.Builder()
+                        .setPackageName(packageName)
+                        .setClassName(MainActivity::class.java.name)
+                        .addKeyToExtraMapping(MainActivity.EXTRA_MODE, ActionBuilders.stringExtra(Mode.SLP.name))
+                        .build(),
+                )
+                .build(),
+        )
+        .build()
+
     private fun text(value: String, size: Float, color: Int) = LayoutElementBuilders.Text.Builder()
         .setText(value)
         .setMaxLines(1)
@@ -166,6 +187,7 @@ class GoodTileService : TileService() {
     private companion object {
         const val RESOURCES_VERSION = "1"
         const val CLICK_BED_PREFIX = "bed-"
+        const val CLICK_OPEN_SLP = "open-slp"
         const val PREFS = "good_tile"
         const val KEY_HANDLED = "handledClickId"
         val lock = Any()

@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -185,7 +186,7 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         val s = _state.value
         when (s.mode) {
             Mode.ALM -> if (s.almEdit != null) saveAlarm(s.almEdit.second) else toggleArmed(s.channel)
-            Mode.SLP -> if (s.slpEdit != null) saveSleepEdit(s.slpEdit) else startSleepEdit(s)
+            Mode.SLP -> if (s.slpEdit != null) saveSleepEdit(s.slpEdit) else slpHold(s)
             Mode.PRO -> preview(currentProfile(s))
             Mode.CHK -> runChecks()
         }
@@ -275,28 +276,48 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
 
     // ---- SLP -------------------------------------------------------------------------------------------
 
+    /**
+     * Tap SET (not editing) logs GOOD NIGHT when the toggle offers BED. When it offers UP the tap only says HOLD SET:
+     * GOOD MORNING closes this morning's alarms on both devices, so a stray tap must not be able to do it.
+     */
     private fun slpSet(s: UiState) {
         val edit = s.slpEdit
         if (edit == null) {
             val now = Instant.now()
             viewModelScope.launch(Dispatchers.IO) {
-                // Decide, then acknowledge the press at once; the writes below can take a moment (Health Connect).
-                val action = sleepRepo.nextAction(now)
-                banner(if (action == SleepAction.UP) "GOOD MORNING" else "GOOD NIGHT")
-                if (action == SleepAction.UP) {
-                    WakeUp.record(ctx, now)
-                    refreshSnapshot()
-                    loadWakeLines()
-                } else {
-                    prefs.lastBedtime = now.toEpochMilli()
-                    sleepRepo.recordBedtime(now, "PHONE")
+                if (sleepRepo.nextAction(now) == SleepAction.UP) {
+                    banner("HOLD SET")
+                    return@launch
                 }
+                // Acknowledge the press at once; the write below can take a moment (Health Connect).
+                banner("GOOD NIGHT")
+                prefs.lastBedtime = now.toEpochMilli()
+                sleepRepo.recordBedtime(now, "PHONE")
                 _state.update { it.copy(sleepAction = sleepRepo.nextAction()) }
             }
             return
         }
         val next = SlpField.entries.getOrNull(edit.field.ordinal + 1)
         if (next == null) saveSleepEdit(edit) else _state.update { it.copy(slpEdit = edit.copy(field = next)) }
+    }
+
+    /** Hold SET (not editing): GOOD MORNING when the toggle offers UP (the deliberate 2 s gesture), else edit this night. */
+    private fun slpHold(s: UiState) {
+        val now = Instant.now()
+        viewModelScope.launch(Dispatchers.IO) {
+            if (sleepRepo.nextAction(now) == SleepAction.UP) goodMorning(now)
+            else withContext(Dispatchers.Main) { startSleepEdit(s) }
+        }
+    }
+
+    /** I'M UP: records the wake time and closes this morning's alarms on both devices. The only GOOD MORNING path. */
+    private suspend fun goodMorning(now: Instant) {
+        // Acknowledge the press at once; the writes below can take a moment (Health Connect).
+        banner("GOOD MORNING")
+        WakeUp.record(ctx, now)
+        refreshSnapshot()
+        loadWakeLines()
+        _state.update { it.copy(sleepAction = sleepRepo.nextAction()) }
     }
 
     private fun refreshSleepAction() {

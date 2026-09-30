@@ -205,7 +205,7 @@ Every screen is the same instrument in a different mode, so there is nothing to 
 | Mode | LCD shows | ▲ / ▼ | SET |
 | --- | --- | --- | --- |
 | ALM · Alarm | Next alarm in big digits, channel (AL1–AL4), lit weekday segments, "IN 7:20 · GENTLE" | Switch channel AL1 → AL4; hold ▼ 2 s: skip or unskip the next occurrence (banner `SKIPPED` / `UNSKIP`) | Edit: hour flashes → minute → days → profile → tone (CHIME / CLASSIC) → sound target (AUTO / PHONE / WATCH / BOTH) [U3]; hold SET 2 s to arm or disarm |
-| SLP · Sleep | Last night's total ("7:42") as a chrono readout, bed → wake, a 7-night LCD bar graph, OH glyph when the data came from OHealth; the wake line under BED / UP (`WOKE SND +6`, `UP EARLY`, `SKIPPED`, `NO ANSWER`); a small line saying what SET logs now (`SET GOOD NIGHT` / `SET GOOD MORNING`; the watch shows `BED` / `UP` beside `SLP`); 7- and 30-day averages, debt and bedtime spread on a second line | Recall LAP 01 → LAP 30 (one lap per night) | Log bedtime now (GOOD NIGHT), or after it, the wake time (GOOD MORNING, I'M UP). The watch's SLP flashes MORNING (GOOD MORNING doesn't fit inside the ring ticks); the tile shows GOOD / MORNING. Hold SET 2 s to edit the shown night: BED → WAKE → GOAL → REMIND on/off [U5] |
+| SLP · Sleep | Last night's total ("7:42") as a chrono readout, bed → wake, a 7-night LCD bar graph, OH glyph when the data came from OHealth; the wake line under BED / UP (`WOKE SND +6`, `UP EARLY`, `SKIPPED`, `NO ANSWER`); a small line saying what SET logs now (`SET GOOD NIGHT` / `HOLD SET GOOD MORNING`; the watch shows `BED` / `UP` beside `SLP`); 7- and 30-day averages, debt and bedtime spread on a second line | Recall LAP 01 → LAP 30 (one lap per night) | Tap SET logs bedtime now (GOOD NIGHT). After it, GOOD MORNING (I'M UP: the wake time, and it closes this morning's alarms on both devices) needs SET held 2 s on the phone and the watch, so a stray tap can't cancel the morning's alarms; a tap then only shows `HOLD SET`. The watch's SLP flashes MORNING (GOOD MORNING doesn't fit inside the ring ticks). In the BED state, hold SET 2 s to edit the shown night: BED → WAKE → GOAL → REMIND on/off [U5] |
 | PRO · Profile | The wake profile as an interval timer: P1 GENTLE, INT 1 LIGHT 10:00, INT 2 BUZZ 3:00, INT 3 TONE 5:00, INT 4 FULL +5:00, SIL 20 | Step through rows (first row picks the profile P1–P3) [U4] | Edit the flashing row; hold SET 2 s for the 60-s preview |
 | CHK · Check | Self-test like a watch's segment test: ALM, FSI, NTF, BAT, VOL, LINK, HC, USE each show a check or blink; then TST and EXP [U9, U10] | Step through items | Open the fix for the blinking item; on TST, set a real test alarm at +3 min on both devices; on EXP, export all data as JSON |
 
@@ -219,9 +219,9 @@ Every screen is the same instrument in a different mode, so there is nothing to 
 
 | Surface | Contents |
 | --- | --- |
-| Tile | LCD strip: `AL1 6:30` and `SLP 7:42`, with a BED button |
+| Tile | LCD strip: `AL1 6:30` and `SLP 7:42`, with a BED/UP button. BED logs a bedtime (GOOD NIGHT); UP opens the watch app in SLP, where GOOD MORNING is the 2 s hold (a tile has no hold) |
 | Complications | Next alarm in segment digits (short text); last night's sleep against goal (ranged value) |
-| App | The same four modes as views of the phone's data. Tap the top half for ▲ and the bottom half for ▼; swipe sideways for MODE; long-press for SET. Actions: on ALM, long-press arms or disarms the channel (sent to the phone); on SLP, long-press logs bedtime; on CHK, long-press runs the item's test [U6] |
+| App | The same four modes as views of the phone's data. Tap the top half for ▲ and the bottom half for ▼; swipe sideways for MODE; long-press for SET. Actions: on ALM, long-press arms or disarms the channel (sent to the phone); on SLP, long-press (2 s) logs bedtime or, after it, GOOD MORNING (I'M UP); on CHK, long-press runs the item's test [U6] |
 
 **Look and feel**
 

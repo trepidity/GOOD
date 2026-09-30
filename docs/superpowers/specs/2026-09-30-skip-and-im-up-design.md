@@ -52,12 +52,14 @@ Closed as won't do: #2 (automatic awake detection; I'M UP stays manual) and #4 (
 
 The existing bed control becomes a two-state toggle, like a stopwatch's start/stop:
 
-| State (`nextSleepAction`) | Phone SLP · SET | Watch SLP · hold 2 s / tile button | Result |
-| --- | --- | --- | --- |
-| `BED` | `GOOD NIGHT` | `BED` | Records a BED anchor (as today) |
-| `UP` | `GOOD MORNING` | `UP` | Records a WAKE anchor and closes today's targets (below) |
+| State (`nextSleepAction`) | Phone SLP · SET | Watch SLP · hold 2 s | Tile button | Result |
+| --- | --- | --- | --- | --- |
+| `BED` | tap: `GOOD NIGHT` | `GOOD NIGHT` | `BED` (tap) | Records a BED anchor (as today) |
+| `UP` | hold 2 s: `GOOD MORNING` (a tap only shows `HOLD SET`) | `MORNING` | `UP` opens the watch app in SLP; logs nothing | Records a WAKE anchor and closes today's targets (below) |
 
-- **Visible state:** the phone's SLP face shows what SET will log (`SET GOOD NIGHT` / `SET GOOD MORNING`, a small line under BED/UP, hidden while editing or while a banner shows). The watch's SLP title row shows `BED` or `UP` next to `SLP`, hidden while a message flashes.
+- **GOOD MORNING needs a 2-second hold everywhere.** It cancels the morning's alarms on both devices, so a stray tap must not trigger it. GOOD NIGHT stays a tap. On the phone, hold SET in the `UP` state is GOOD MORNING; in the `BED` state it still edits the shown night. A tile has no hold, so its `UP` launches the app in SLP instead.
+
+- **Visible state:** the phone's SLP face shows what SET will log (`SET GOOD NIGHT` / `HOLD SET GOOD MORNING`, a small line under BED/UP, hidden while editing or while a banner shows). The watch's SLP title row shows `BED` or `UP` next to `SLP`, hidden while a message flashes.
 - **State rule:** `UP` when the latest BED anchor falls in the current night window (18:00–14:00, `NightWindow`) and no WAKE anchor follows it. Otherwise `BED`. So in the 14:00–18:00 gap it always shows `BED`, and a bed press left from days ago doesn't leave it stuck on `UP`.
 - **Targets** (`imUpTargets`): every non-terminal occurrence due **today before 14:00** local, on any channel, **including one already in its stages**. Pressing at 22:00 therefore never touches tomorrow's alarm.
 - Each target is closed as **`DISMISSED`** with `dismissedAt` = press time and `dismissedOn` = the pressing device. This is a dismiss before ringing: it stops running stages on both devices, and a one-shot channel disarms, exactly as a normal dismiss does.
@@ -159,12 +161,12 @@ The watch and phone must be updated together: an older app can't decode `CANCELL
 
 **Edit or disarm (phone):** `rescheduleAll` → `decide` returns `cancelled` → `markInstance(CANCELLED)`, event log `CANCELLED`. If it was `FIRING`: `WakeService.remoteCommands.tryEmit(close)` and `PhoneSync.sendDismiss(…, Command(id, now, PHONE, CANCELLED))`.
 
-**I'M UP (phone):** SET in `UP` state → `WakeUp.record(at, PHONE)`:
+**I'M UP (phone):** hold SET 2 s in `UP` state → `WakeUp.record(at, PHONE)`:
 1. `SleepRepository.onWake(at)`: WAKE anchor, rebuild the night, queue the +30 min / +2 h / 11:00 syncs. Once per press, with or without targets.
 2. For each `imUpTargets(snapshot)`: reduce with `Dismiss(PHONE)`, `InstanceEvents.record(…, stampWake = false)`, then `PhoneSync.sendDismiss`, the same messages a phone dismiss sends. A running `WakeService` stops through `remoteCommands`.
 3. `rescheduleAll`, then `publishSummary`. Event log `IM_UP` with the number of targets.
 
-**I'M UP (watch):** hold in `UP` state (SLP mode or tile) → on the watch:
+**I'M UP (watch):** hold in `UP` state (SLP mode; the tile's `UP` opens it) → on the watch:
 1. `imUpTargets(WatchScheduleStore)`. For each target: reduce with `Dismiss(WATCH)`, update the store, `cancelChannel`, stop `WakeStageService` if it's running, and `WatchSync.sendDismiss` (existing DataItem plus outbox message).
 2. Send `/sleep/wake` through the outbox; record the local wake time for the toggle.
 3. Refresh surfaces.
@@ -219,8 +221,8 @@ Following `~/.claude/skills/test-selection`: tests only for pure decisions that 
 | --- | --- | --- |
 | 13 | ALM → hold ▼ on a weekday channel | `SKIP <day>`; watch ALM shows the following day |
 | 14 | Hold ▼ again | Skip cleared on both devices |
-| 15 | Set AL1 for +15 min, SLP → GOOD NIGHT, then GOOD MORNING before it rings | No ring on either device; SLP shows the wake time as the press time and `UP EARLY` |
-| 16 | As 15, but press UP on the watch with the phone's Bluetooth off | Watch doesn't buzz; after reconnecting, the phone's alarm is closed (if not yet rung) |
+| 15 | Set AL1 for +15 min, SLP → tap SET (GOOD NIGHT); tap SET again, then hold SET 2 s (GOOD MORNING) before it rings | The tap only shows `HOLD SET`; after the hold, no ring on either device; SLP shows the wake time as the press time and `UP EARLY` |
+| 16 | As 15, but hold SET 2 s on the watch's SLP (or tap the tile's UP, which opens it) with the phone's Bluetooth off | Watch doesn't buzz; after reconnecting, the phone's alarm is closed (if not yet rung) |
 | 17 | Skip tomorrow's alarm; next day, don't open the app until after 11:00 | Session present with the OH badge (if OHealth synced), or ending at your first unlock after the alarm time |
 | 18 | Set AL1 for +11 min (Gentle). Once the phone's sunrise starts, ALM → hold SET to disarm AL1 | Sunrise stops at once; the watch doesn't buzz at T−3 |
 | 19 | Next morning after a normal dismiss: SLP | `WOKE <stage> +<min>` under BED/UP |
@@ -236,7 +238,7 @@ Following `~/.claude/skills/test-selection`: tests only for pure decisions that 
 ## SPEC.md updates when this lands
 
 - Requirements: add F13 (SKIP next occurrence), F14 (I'M UP), both Should.
-- UX design → ALM row: hold ▼ = skip or unskip. SLP row: SET = GOOD NIGHT or GOOD MORNING; the wake-behaviour line. CHK: `USE`.
+- UX design → ALM row: hold ▼ = skip or unskip. SLP row: tap SET = GOOD NIGHT, hold SET 2 s = GOOD MORNING; the wake-behaviour line. CHK: `USE`.
 - Sleep tracking: step 2 "On dismiss **or I'M UP**…"; inferred wake for skipped nights; daily 11:00 sync; the wake-behaviour metric as built.
 - Data Layer table: `/sleep/wake`; `Command.state`; `SleepSummary` anchor fields.
 - Data model: `CANCELLED`; `firstStageAt`, `dismissedAtStage`; `SKIPPED` written by SKIP only; I'M UP closes as `DISMISSED` before ringing.
