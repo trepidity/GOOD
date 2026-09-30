@@ -12,7 +12,7 @@ enum class SleepAction { BED, UP }
 object SleepToggle {
     fun next(lastBed: Instant?, lastWake: Instant?, now: Instant, zone: ZoneId): SleepAction {
         val date = NightWindow.wakeDateOf(now, zone) ?: return SleepAction.BED
-        val bed = lastBed?.takeIf { it in NightWindow.forWakeDate(date, zone) && !it.isAfter(now) } ?: return SleepAction.BED
+        val bed = lastBed?.takeIf { it in NightWindow.forWakeDate(date, zone) } ?: return SleepAction.BED
         return if (lastWake != null && !lastWake.isBefore(bed)) SleepAction.BED else SleepAction.UP
     }
 }
