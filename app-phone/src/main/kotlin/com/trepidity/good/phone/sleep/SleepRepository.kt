@@ -1,6 +1,7 @@
 package com.trepidity.good.phone.sleep
 
 import android.content.Context
+import com.trepidity.good.model.InstanceState
 import com.trepidity.good.model.SleepSummary
 import com.trepidity.good.phone.AppGraph
 import com.trepidity.good.phone.EventLog
@@ -15,7 +16,10 @@ import com.trepidity.good.sleep.Night
 import com.trepidity.good.sleep.NightWindow
 import com.trepidity.good.sleep.Sample
 import com.trepidity.good.sleep.SessionBuilder
+import com.trepidity.good.sleep.SleepAction
 import com.trepidity.good.sleep.SleepSource
+import com.trepidity.good.sleep.SleepToggle
+import com.trepidity.good.sleep.WakeInference
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -41,6 +45,7 @@ class SleepRepository(private val context: Context, private val db: GoodDatabase
     suspend fun recordBedtime(at: Instant, from: String) {
         dao.insertAnchor(AnchorEntity(at = at.toEpochMilli(), kind = AnchorEntity.BED))
         EventLog.log(context, "BEDTIME", "from $from")
+        publishSummary()
     }
 
     suspend fun recordWatchSignal(at: Instant, asleep: Boolean) =
@@ -55,7 +60,18 @@ class SleepRepository(private val context: Context, private val db: GoodDatabase
         val date = NightWindow.wakeDateOf(at, zone) ?: return
         rebuild(date)
         SleepSyncWorker.scheduleAfterWake(context, date, at)
+        SleepSyncWorker.scheduleDaily(context)
+        publishSummary()
     }
+
+    /** GOOD NIGHT or GOOD MORNING next, from the latest bed and wake anchors (I'M UP spec). */
+    suspend fun nextAction(now: Instant = Instant.now()): SleepAction {
+        val (bed, wake) = lastAnchors()
+        return SleepToggle.next(bed, wake, now, zone)
+    }
+
+    private suspend fun lastAnchors(): Pair<Instant?, Instant?> =
+        dao.latestAnchor(AnchorEntity.BED)?.at?.let(Instant::ofEpochMilli) to dao.latestAnchor(AnchorEntity.WAKE)?.at?.let(Instant::ofEpochMilli)
 
     /** Re-reads the last few nights; called whenever the app opens, as the foreground fallback for REVIEW P1. */
     suspend fun syncRecent(nights: Int = 3) {
@@ -74,7 +90,8 @@ class SleepRepository(private val context: Context, private val db: GoodDatabase
         val anchorRows = dao.anchors(from, to)
         val dismiss = anchorRows.lastOrNull { it.kind == AnchorEntity.WAKE }?.at
         val bed = anchorRows.lastOrNull { it.kind == AnchorEntity.BED && (dismiss == null || it.at < dismiss) }?.at
-        val anchors = Anchors(bed?.let(Instant::ofEpochMilli), dismiss?.let(Instant::ofEpochMilli))
+        val wake = dismiss?.let(Instant::ofEpochMilli) ?: inferWake(window, bed?.let(Instant::ofEpochMilli), samples)
+        val anchors = Anchors(bed?.let(Instant::ofEpochMilli), wake)
 
         val existing = dao.session(wakeDate.toString())
         val draft = SessionBuilder.build(window, external, samples, anchors, context.packageName) ?: return@withLock existing
@@ -105,6 +122,24 @@ class SleepRepository(private val context: Context, private val db: GoodDatabase
         entity.copy(id = id)
     }
 
+    /**
+     * A night whose alarm was skipped has no dismiss. Its wake is inferred from the first phone unlock or watch
+     * "awake" after the skipped time (#1). Not stored: a Health Connect session or a real I'M UP still wins later.
+     */
+    private suspend fun inferWake(window: NightWindow, bed: Instant?, samples: List<Sample>): Instant? {
+        val from = window.start.toEpochMilli()
+        val to = window.end.toEpochMilli()
+        val skipped = db.instances().between(from, to)
+            .firstOrNull { it.alarmId > 0 && it.state == InstanceState.SKIPPED.name } ?: return null
+        val skippedAt = Instant.ofEpochMilli(skipped.scheduledAt)
+        val unlocks = UnlockLog.unlocks(context, from, to)
+        val awake = samples.filter { it.source == SleepSource.WATCH && !it.asleep }.map { it.at }
+        val inferred = WakeInference.infer(skippedAt, unlocks + awake, bed ?: skippedAt, window) ?: return null
+        val via = if (inferred in unlocks) "unlock" else "watch awake"
+        EventLog.log(context, "WAKE_INFERRED", "${window.wakeDate} at $inferred via $via")
+        return inferred
+    }
+
     /** Hand edit (SPEC step 6): marked edited, so later syncs never overwrite it. */
     suspend fun edit(wakeDate: LocalDate, start: Instant, end: Instant) = mutex.withLock {
         if (!end.isAfter(start)) return@withLock
@@ -126,6 +161,7 @@ class SleepRepository(private val context: Context, private val db: GoodDatabase
 
     suspend fun publishSummary() {
         val last = dao.allSessions().lastOrNull()
+        val (bed, wake) = lastAnchors()
         val summary = SleepSummary(
             wakeDate = last?.wakeDate,
             totalSleepMin = last?.totalSleepMin,
@@ -133,6 +169,8 @@ class SleepRepository(private val context: Context, private val db: GoodDatabase
             wakeEpochMs = last?.end,
             goalMin = AppGraph.prefs(context).sleepGoalMin,
             fromHealthConnect = last?.source == SleepSource.HEALTH_CONNECT.name,
+            lastBedAnchorEpochMs = bed?.toEpochMilli(),
+            lastWakeAnchorEpochMs = wake?.toEpochMilli(),
         )
         runCatching { PhoneSync.pushSleepSummary(context, summary) }
     }

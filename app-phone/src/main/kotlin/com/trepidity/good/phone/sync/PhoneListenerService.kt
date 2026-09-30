@@ -12,6 +12,7 @@ import com.trepidity.good.model.HealthReply
 import com.trepidity.good.model.InstanceState
 import com.trepidity.good.model.SleepSignalMessage
 import com.trepidity.good.model.ToggleCommand
+import com.trepidity.good.model.WakeAnchorMessage
 import com.trepidity.good.phone.AppGraph
 import com.trepidity.good.phone.EventLog
 import com.trepidity.good.phone.GoodApplication
@@ -41,6 +42,9 @@ class PhoneListenerService : WearableListenerService() {
             }
             DataLayerPaths.SLEEP_SIGNAL -> runCatching { SyncCodec.decodeAny<SleepSignalMessage>(event.data) }.getOrNull()?.let { msg ->
                 background { AppGraph.sleep(this).recordWatchSignal(Instant.ofEpochMilli(msg.atEpochMs), msg.asleep) }
+            }
+            DataLayerPaths.SLEEP_WAKE -> runCatching { SyncCodec.decodeAny<WakeAnchorMessage>(event.data) }.getOrNull()?.let { msg ->
+                background { AppGraph.sleep(this).onWake(Instant.ofEpochMilli(msg.atEpochMs)) }
             }
         }
     }

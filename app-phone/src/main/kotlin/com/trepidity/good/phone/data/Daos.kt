@@ -67,6 +67,7 @@ interface SleepDao {
 
     @Insert suspend fun insertAnchor(anchor: AnchorEntity)
     @Query("SELECT * FROM sleep_anchor WHERE at BETWEEN :from AND :to ORDER BY at") suspend fun anchors(from: Long, to: Long): List<AnchorEntity>
+    @Query("SELECT * FROM sleep_anchor WHERE kind = :kind ORDER BY at DESC LIMIT 1") suspend fun latestAnchor(kind: String): AnchorEntity?
 }
 
 @Dao

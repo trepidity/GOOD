@@ -10,6 +10,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.trepidity.good.phone.alarm.AlarmScheduler
+import com.trepidity.good.phone.sleep.UnlockLog
 import com.trepidity.good.phone.sync.PhoneSync
 
 /** The CHK mode's self-test items, in display order (SPEC UX, REVIEW U9). */
@@ -22,6 +23,7 @@ enum class CheckId(val code: String, val title: String) {
     LINK("LINK", "Watch linked"),
     HC("HC", "Health Connect"),
     ACT("ACT", "Sleep signals"),
+    USE("USE", "Usage access"),
 }
 
 /** One self-test line: whether it's OK, a short detail, and where to fix it (HC's fix is the consent screen). */
@@ -59,6 +61,8 @@ object ReliabilityCheck {
             CheckItem(CheckId.HC, hcOk,
                 when { !hc.available -> hc.status; !hcOk -> "grant sleep access"; hc.backgroundReadSupported && !hc.canReadInBackground() -> "allow background reads"; else -> "reading sleep" },
                 null),
+            CheckItem(CheckId.USE, UnlockLog.granted(context), "unlock times end a skipped night",
+                Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, pkgUri)),
         )
     }
 }
