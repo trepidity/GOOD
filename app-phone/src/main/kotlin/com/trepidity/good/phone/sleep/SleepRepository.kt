@@ -54,12 +54,18 @@ class SleepRepository(private val context: Context, private val db: GoodDatabase
     suspend fun recordPhoneSignal(at: Instant, asleep: Boolean, confidence: Int?) =
         dao.insertSignal(SleepSignalEntity(at = at.toEpochMilli(), source = SleepSource.PHONE.name, asleep = asleep, confidence = confidence))
 
-    /** Alarm dismissed: anchor the wake time, write the provisional session, and queue the Health Connect re-reads. */
+    /**
+     * Alarm dismissed or I'M UP: anchor the wake time and, when it falls inside a night, write the provisional session
+     * and queue the Health Connect re-reads. The summary is published after every anchor, even an afternoon one outside
+     * any night, so the watch's BED/UP toggle follows it.
+     */
     suspend fun onWake(at: Instant) {
         dao.insertAnchor(AnchorEntity(at = at.toEpochMilli(), kind = AnchorEntity.WAKE))
-        val date = NightWindow.wakeDateOf(at, zone) ?: return
-        rebuild(date)
-        SleepSyncWorker.scheduleAfterWake(context, date, at)
+        val date = NightWindow.wakeDateOf(at, zone)
+        if (date != null) {
+            rebuild(date)
+            SleepSyncWorker.scheduleAfterWake(context, date, at)
+        }
         SleepSyncWorker.scheduleDaily(context)
         publishSummary()
     }
