@@ -158,6 +158,7 @@ Watch: tap the top or bottom half for ▲ / ▼, swipe sideways for MODE, hold 2
 | 18 | Set AL1 for +11 min (Gentle). Once the phone's sunrise starts, ALM → hold SET to disarm AL1 | Sunrise stops at once; the watch doesn't buzz at T−3 |
 | 19 | Next morning after a normal dismiss: SLP | `WOKE <stage> +<min>` under BED/UP |
 | 20 | Install this build over the previous one (don't uninstall) | Alarms, history and sleep nights are all still there |
+| 21 | Skip tomorrow on AL1, disarm AL1, re-arm it | Countdown points at tomorrow again, and it rings |
 
 Known limits from the emulator run:
 - Install the phone and watch apps together: an older app can't read the new CANCELLED state.

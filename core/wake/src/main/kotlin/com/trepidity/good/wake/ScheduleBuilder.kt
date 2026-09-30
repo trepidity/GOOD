@@ -37,11 +37,13 @@ data class ChannelDecision(
 object ScheduleBuilder {
 
     /**
-     * The channel's current occurrence: the latest by alarm time, ignoring CANCELLED rows. A cancelled row
-     * can lie in the future (7:00 moved to 6:30), and treating it as current would roll past 6:30.
+     * The channel's current occurrence: the latest by alarm time, ignoring CANCELLED and SKIPPED rows. A closed
+     * future row must never be current: a cancelled one (7:00 moved to 6:30) would roll past 6:30, and a
+     * skipped one would lose the skipped day after the skip is cleared by disarm and re-arm.
      */
     fun current(rows: List<AlarmInstance>): AlarmInstance? =
-        rows.filter { it.state != InstanceState.CANCELLED }.maxByOrNull { it.scheduledAtEpochMs }
+        rows.filter { it.state != InstanceState.CANCELLED && it.state != InstanceState.SKIPPED }
+            .maxByOrNull { it.scheduledAtEpochMs }
 
     fun decide(channel: Channel, now: Instant, zone: ZoneId): ChannelDecision {
         val (alarm, profile, last) = channel

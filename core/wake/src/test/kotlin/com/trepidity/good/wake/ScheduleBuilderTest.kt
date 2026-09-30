@@ -96,6 +96,21 @@ class ScheduleBuilderTest {
         assertEquals(friday.id, d.cancelled!!.id)
     }
 
+    /**
+     * Gate: skip spec — a skip followed by disarm and re-arm must not lose the skipped day. Disarming clears the
+     * skip, so re-arming must count from now, not from the closed Thursday row.
+     */
+    @Test
+    fun `a skip followed by disarm and re-arm brings the skipped day back`() {
+        val skip = decide(weekdays.copy(skipNextDate = "2026-10-01"), instance(InstanceState.SCHEDULED), now = at("2026-09-30T22:00"))
+        val afterSkip = listOf(skip.skipped!!, skip.active!!)
+        val disarm = decide(weekdays.copy(enabled = false), ScheduleBuilder.current(afterSkip), now = at("2026-09-30T22:01"))
+        val afterDisarm = listOf(skip.skipped!!, disarm.cancelled!!)
+        val rearm = decide(weekdays, ScheduleBuilder.current(afterDisarm), now = at("2026-09-30T22:02"))
+        assertEquals(InstanceIds.of(1, t), rearm.active!!.id)
+        assertEquals(InstanceState.SCHEDULED, rearm.active!!.state)
+    }
+
     /** Gate: skip spec — SKIP never cuts off a wake-up that is already running. */
     @Test
     fun `a ringing occurrence on the skip date keeps ringing`() {

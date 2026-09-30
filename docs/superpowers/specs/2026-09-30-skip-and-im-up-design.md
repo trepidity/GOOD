@@ -117,7 +117,7 @@ For a night with a `SKIPPED` occurrence and no WAKE anchor, `rebuild` infers one
 | `WakeAnchorMessage` (new) | `core/model` | `(atEpochMs: Long)` | `/sleep/wake`, watch → phone |
 | `WakeStateMachine.reduce` (changed) | `core/wake` | unchanged | Sets `firstStageAt` once; Dismiss keeps `dismissedAtStage` |
 | `ScheduleBuilder.decide` (changed) | `core/wake` | `ChannelDecision(active, missed, skipped, cancelled)` | Branches below |
-| `ScheduleBuilder.current` | `core/wake` | `(rows: List<AlarmInstance>) -> AlarmInstance?` | Latest by scheduled time, ignoring `CANCELLED` |
+| `ScheduleBuilder.current` | `core/wake` | `(rows: List<AlarmInstance>) -> AlarmInstance?` | Latest by scheduled time, ignoring `CANCELLED` and `SKIPPED` |
 | `imUpTargets` | `core/wake` | `(entries, now, zone) -> List<ScheduleEntry>` | Non-terminal, channel ≥ 1, due on `now`'s local date before 14:00 |
 | `WakeBehaviour.of` | `core/wake` | `(AlarmInstance) -> WakeBehaviour?` | Table above |
 | `nextSleepAction` | `core/sleep` | `(lastBed, lastWake, now, zone) -> SleepAction` | `UP` if `lastBed` is in the current night window and not followed by `lastWake` |
@@ -132,7 +132,7 @@ For a night with a `SKIPPED` occurrence and no WAKE anchor, `rebuild` infers one
 5. **Recompute:** `live` otherwise → search from `now`. Same ID → keep `last` as is. Null or a different ID → the new one is active and `last` is `cancelled`.
 6. Existing missed and terminal handling unchanged.
 
-**Which row is the channel's current occurrence.** Today `rescheduleAll` passes `decide` the channel's row with the latest scheduled time. Once replaced occurrences are closed as `CANCELLED`, that row can be a cancelled future one: move 7:00 to 6:30 and the cancelled 7:00 row would make the next run roll past 6:30. So `ScheduleBuilder.current(rows)` picks the latest row **that isn't `CANCELLED`**, and `rescheduleAll` passes that as `last`. A cancelled row's ID can be reused: when the recompute lands on it again, `rescheduleAll` overwrites it as `SCHEDULED`.
+**Which row is the channel's current occurrence.** Today `rescheduleAll` passes `decide` the channel's row with the latest scheduled time. Once replaced occurrences are closed as `CANCELLED`, that row can be a cancelled future one: move 7:00 to 6:30 and the cancelled 7:00 row would make the next run roll past 6:30. So `ScheduleBuilder.current(rows)` picks the latest row, ignoring `CANCELLED` **and `SKIPPED`** rows: a closed future row must never be the channel's current occurrence. A skipped one would lose the skipped day: skip Thursday, disarm (which clears the skip), re-arm, and a `SKIPPED` Thursday row as `last` would make the recompute start after Thursday and arm Friday. `rescheduleAll` passes the result as `last`. A cancelled or skipped row's ID can be reused: when the recompute lands on it again, `rescheduleAll` overwrites it as `SCHEDULED`.
 
 **Undo needs no branch of its own.** After a skip, the channel's latest occurrence is the next one (say Thursday), not the skipped Wednesday. Clearing the skip makes the recompute find Wednesday again. Its deterministic ID is the skipped row's, which `rescheduleAll` overwrites as `SCHEDULED`, and Thursday is closed as `CANCELLED`; it's recreated when Wednesday is over. `ScheduleMerge` needs no change: phone snapshots only carry active occurrences, so a watch never holds a phone-sent `SKIPPED` copy.
 
@@ -204,6 +204,7 @@ Following `~/.claude/skills/test-selection`: tests only for pure decisions that 
 | `decide`: disarming during FIRING returns it `cancelled` | #6 |
 | `decide`: moving the time of a SCHEDULED occurrence returns the old one `cancelled`; changing only the profile keeps it | #5, and no spurious cancel |
 | `decide` + `current`: after moving 7:00 to 6:30, the next run keeps 6:30 active (the cancelled 7:00 row is not current) | Moving an alarm earlier still rings today |
+| `decide` + `current`: skip Thursday, disarm, re-arm → Thursday's ID is active again (the `SKIPPED` row is not current) | A skip followed by disarm and re-arm doesn't lose the skipped day |
 | `imUpTargets`: 05:00 press → today's 06:30 is a target; 22:00 press → tomorrow's 06:30 is not; 13:59 vs 14:00 boundary; channel 0 test alarm excluded | Same-day, before-14:00 rule |
 | `nextSleepAction`: BED in window with no WAKE → UP; WAKE after → BED; BED from the previous night → BED; 14:00–18:00 → BED | The toggle never gets stuck on UP |
 | `WakeStateMachine`: `firstStageAt` is set by the first stage only; a dismiss keeps `dismissedAtStage` | #7 data |
@@ -221,6 +222,7 @@ Following `~/.claude/skills/test-selection`: tests only for pure decisions that 
 | 17 | Skip tomorrow's alarm; next day, don't open the app until after 11:00 | Session present with the OH badge (if OHealth synced), or ending at your first unlock after the alarm time |
 | 18 | Set AL1 for +11 min (Gentle). Once the phone's sunrise starts, ALM → hold SET to disarm AL1 | Sunrise stops at once; the watch doesn't buzz at T−3 |
 | 19 | Next morning after a normal dismiss: SLP | `WOKE <stage> +<min>` under BED/UP |
+| 21 | Skip tomorrow on AL1, disarm AL1, re-arm it | Countdown points at tomorrow again, and it rings |
 
 ## Still open and tracked
 
