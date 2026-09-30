@@ -1,5 +1,6 @@
 package com.trepidity.good.wear.surface
 
+import androidx.core.content.edit
 import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders.argb
 import androidx.wear.protolayout.DimensionBuilders.dp
@@ -35,9 +36,8 @@ import java.time.Instant
 class GoodTileService : TileService() {
 
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> {
-        val pressed = requestParams.currentState.lastClickableId == CLICK_BED
         val lines = when {
-            !pressed -> listOf(alarmLine(), sleepLine())
+            !claimPress(requestParams.currentState.lastClickableId) -> listOf(alarmLine(), sleepLine())
             else -> sleepButton()
         }
         val tile = TileBuilders.Tile.Builder()
@@ -51,12 +51,26 @@ class GoodTileService : TileService() {
     override fun onTileResourcesRequest(requestParams: RequestBuilders.ResourcesRequest): ListenableFuture<ResourceBuilders.Resources> =
         Futures.immediateFuture(ResourceBuilders.Resources.Builder().setVersion(RESOURCES_VERSION).build())
 
-    /** BED or UP, once per press; a refresh repeating the last click id within a minute doesn't log it again. */
+    /**
+     * True once per press. The renderer can repeat the last clicked id on later refreshes (the freshness refresh, or
+     * the update I'M UP itself requests); with a toggling button a repeat would log the opposite action. So every
+     * render gives the button a fresh id, and an id is acted on only the first time it arrives. It is recorded before
+     * acting, and in device-protected storage so a killed process doesn't forget it.
+     */
+    private fun claimPress(id: String): Boolean {
+        if (!id.startsWith(CLICK_BED_PREFIX)) return false
+        val prefs = createDeviceProtectedStorageContext().getSharedPreferences(PREFS, MODE_PRIVATE)
+        synchronized(lock) {
+            if (prefs.getString(KEY_HANDLED, null) == id) return false
+            prefs.edit(commit = true) { putString(KEY_HANDLED, id) }
+        }
+        return true
+    }
+
+    /** Logs BED or I'M UP, whichever the toggle offers, and answers GOOD NIGHT or GOOD MORNING for this render. */
     private fun sleepButton(): List<String> {
         val now = System.currentTimeMillis()
-        if (now - lastBedAt < 60_000) return lastLines
-        lastBedAt = now
-        lastLines = if (WatchScheduleStore.sleepAction(this) == SleepAction.UP) {
+        return if (WatchScheduleStore.sleepAction(this) == SleepAction.UP) {
             WatchImUp.record(this, Instant.ofEpochMilli(now))
             listOf("GOOD", "MORNING")
         } else {
@@ -66,7 +80,6 @@ class GoodTileService : TileService() {
             }
             listOf("GOOD", "NIGHT")
         }
-        return lastLines
     }
 
     private fun alarmLine(): String {
@@ -110,7 +123,7 @@ class GoodTileService : TileService() {
                     )
                     .setClickable(
                         ModifiersBuilders.Clickable.Builder()
-                            .setId(CLICK_BED)
+                            .setId("$CLICK_BED_PREFIX${System.currentTimeMillis()}")
                             .setOnClick(ActionBuilders.LoadAction.Builder().build())
                             .build(),
                     )
@@ -152,13 +165,14 @@ class GoodTileService : TileService() {
 
     private companion object {
         const val RESOURCES_VERSION = "1"
-        const val CLICK_BED = "bed"
+        const val CLICK_BED_PREFIX = "bed-"
+        const val PREFS = "good_tile"
+        const val KEY_HANDLED = "handledClickId"
+        val lock = Any()
         const val PANEL = 0xFFA7B39A.toInt()
         const val INK = 0xFF1B2116.toInt()
         const val CASE = 0xFF2B2E2A.toInt()
         const val LABEL = 0xFFC4C9BD.toInt()
 
-        @Volatile var lastBedAt = 0L
-        @Volatile var lastLines = listOf("GOOD", "NIGHT")
     }
 }
