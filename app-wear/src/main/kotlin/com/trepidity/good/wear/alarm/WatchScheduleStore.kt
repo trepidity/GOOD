@@ -6,9 +6,13 @@ import com.trepidity.good.model.AlarmInstance
 import com.trepidity.good.model.ScheduleEntry
 import com.trepidity.good.model.ScheduleSnapshot
 import com.trepidity.good.model.SleepSummary
+import com.trepidity.good.sleep.SleepAction
+import com.trepidity.good.sleep.SleepToggle
 import com.trepidity.good.sync.SyncCodec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * The watch's own copy of the schedule (so it rings with the phone out of range) and the last sleep summary,
@@ -18,6 +22,8 @@ object WatchScheduleStore {
     private const val PREFS = "good_watch_schedule"
     private const val KEY = "snapshot"
     private const val KEY_SUMMARY = "sleepSummary"
+    private const val KEY_BED = "localBedAt"
+    private const val KEY_WAKE = "localWakeAt"
     private val lock = Any()
 
     private val _snapshot = MutableStateFlow<ScheduleSnapshot?>(null)
@@ -59,6 +65,19 @@ object WatchScheduleStore {
     fun saveSummary(context: Context, summary: SleepSummary) {
         prefs(context).edit(commit = true) { putString(KEY_SUMMARY, SyncCodec.encodeAny(summary).decodeToString()) }
         _summary.value = summary
+    }
+
+    /** Presses made on the watch, so the BED/UP toggle flips at once even with the phone out of range. */
+    fun recordLocalBed(context: Context, at: Long) = prefs(context).edit(commit = true) { putLong(KEY_BED, at) }
+    fun recordLocalWake(context: Context, at: Long) = prefs(context).edit(commit = true) { putLong(KEY_WAKE, at) }
+
+    /** BED or UP: the later of the phone's and the watch's own anchors of each kind (I'M UP spec). */
+    fun sleepAction(context: Context, now: Instant = Instant.now()): SleepAction {
+        val p = prefs(context)
+        val summary = sleepSummary.value ?: summary(context)
+        val bed = listOfNotNull(summary?.lastBedAnchorEpochMs, p.getLong(KEY_BED, 0).takeIf { it > 0 }).maxOrNull()
+        val wake = listOfNotNull(summary?.lastWakeAnchorEpochMs, p.getLong(KEY_WAKE, 0).takeIf { it > 0 }).maxOrNull()
+        return SleepToggle.next(bed?.let(Instant::ofEpochMilli), wake?.let(Instant::ofEpochMilli), now, ZoneId.systemDefault())
     }
 
     private fun prefs(context: Context) =

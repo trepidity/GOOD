@@ -38,24 +38,27 @@ import com.trepidity.good.model.ScheduleEntry
 import com.trepidity.good.model.ScheduleSnapshot
 import com.trepidity.good.model.StageType
 import com.trepidity.good.model.ToggleCommand
+import com.trepidity.good.sleep.SleepAction
 import com.trepidity.good.sync.DataLayerPaths
 import com.trepidity.good.sync.SyncCodec
 import com.trepidity.good.wear.WatchFormat
 import com.trepidity.good.wear.WearApplication
 import com.trepidity.good.wear.alarm.WatchScheduleStore
 import com.trepidity.good.wear.sleep.PassiveSleep
+import com.trepidity.good.wear.sleep.WatchImUp
 import com.trepidity.good.wear.sync.WatchSync
 import com.trepidity.good.wear.wake.WakeStageService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Instant
 
 private const val GLOW_MS = 3_000L
 private const val FLASH_MS = 2_000L
 private const val TEST_MS = 40_000L
 private const val PRO_ROWS = 6
 
-/** A transient LCD message ("SENT", "GOOD NIGHT") shown in [mode] for two seconds. */
+/** A transient LCD message ("SENT", "GOOD NIGHT", "MORNING") shown in [mode] for two seconds. */
 private data class Flash(val mode: Mode, val text: String)
 
 /**
@@ -149,9 +152,16 @@ fun WatchApp(resumes: Int, onExit: () -> Unit) {
                 }
             }
             Mode.SLP -> {
-                val msg = BedtimeMessage(System.currentTimeMillis())
-                flash = Flash(Mode.SLP, "GOOD NIGHT")
-                app.appScope.launch { WatchSync.send(app, DataLayerPaths.SLEEP_BEDTIME, SyncCodec.encodeAny(msg)) }
+                val at = System.currentTimeMillis()
+                if (WatchScheduleStore.sleepAction(context) == SleepAction.UP) {
+                    WatchImUp.record(context, Instant.ofEpochMilli(at))
+                    // "GOOD MORNING" is wider than the round glass at SleepBody's message size; "GOOD NIGHT" fits.
+                    flash = Flash(Mode.SLP, "MORNING")
+                } else {
+                    WatchScheduleStore.recordLocalBed(context, at)
+                    flash = Flash(Mode.SLP, "GOOD NIGHT")
+                    app.appScope.launch { WatchSync.send(app, DataLayerPaths.SLEEP_BEDTIME, SyncCodec.encodeAny(BedtimeMessage(at))) }
+                }
             }
             Mode.PRO -> Unit
             Mode.CHK -> when (chkItem) {
@@ -185,7 +195,7 @@ fun WatchApp(resumes: Int, onExit: () -> Unit) {
     }
     val setLabel = when (mode) {
         Mode.ALM -> "Arm or disarm alarm $channel"
-        Mode.SLP -> "Log bedtime now"
+        Mode.SLP -> if (WatchScheduleStore.sleepAction(context) == SleepAction.UP) "Log wake-up now" else "Log bedtime now"
         Mode.PRO -> null
         Mode.CHK -> if (holdEnabled) if (chkResult?.ok == null) "Start or stop test" else "Fix or recheck" else null
     }

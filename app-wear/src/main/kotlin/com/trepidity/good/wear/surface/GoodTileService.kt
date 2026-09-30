@@ -17,23 +17,29 @@ import androidx.wear.tiles.TileService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.trepidity.good.model.BedtimeMessage
+import com.trepidity.good.sleep.SleepAction
 import com.trepidity.good.sync.DataLayerPaths
 import com.trepidity.good.sync.SyncCodec
 import com.trepidity.good.wear.WatchFormat
 import com.trepidity.good.wear.WearApplication
 import com.trepidity.good.wear.alarm.WatchScheduleStore
+import com.trepidity.good.wear.sleep.WatchImUp
 import com.trepidity.good.wear.sync.WatchSync
 import kotlinx.coroutines.launch
+import java.time.Instant
 
 /**
- * The LCD strip tile: `AL1 6:30` and `SLP 7:42` on the grey-green panel, with a BED button that logs bedtime
- * (through the outbox, so it works out of range) and answers "GOOD NIGHT" for that render.
+ * The LCD strip tile: `AL1 6:30` and `SLP 7:42` on the grey-green panel, with a BED/UP button that logs bedtime or
+ * I'M UP (through the outbox, so it works out of range) and answers "GOOD NIGHT" or "GOOD MORNING" for that render.
  */
 class GoodTileService : TileService() {
 
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> {
-        val bed = requestParams.currentState.lastClickableId == CLICK_BED && logBedtime()
-        val lines = if (bed) listOf("GOOD", "NIGHT") else listOf(alarmLine(), sleepLine())
+        val pressed = requestParams.currentState.lastClickableId == CLICK_BED
+        val lines = when {
+            !pressed -> listOf(alarmLine(), sleepLine())
+            else -> sleepButton()
+        }
         val tile = TileBuilders.Tile.Builder()
             .setResourcesVersion(RESOURCES_VERSION)
             .setFreshnessIntervalMillis(30 * 60_000L)
@@ -45,15 +51,22 @@ class GoodTileService : TileService() {
     override fun onTileResourcesRequest(requestParams: RequestBuilders.ResourcesRequest): ListenableFuture<ResourceBuilders.Resources> =
         Futures.immediateFuture(ResourceBuilders.Resources.Builder().setVersion(RESOURCES_VERSION).build())
 
-    /** Sends once per press; a refresh that repeats the last click id within a minute doesn't log it again. */
-    private fun logBedtime(): Boolean {
+    /** BED or UP, once per press; a refresh repeating the last click id within a minute doesn't log it again. */
+    private fun sleepButton(): List<String> {
         val now = System.currentTimeMillis()
-        if (now - lastBedAt < 60_000) return true
+        if (now - lastBedAt < 60_000) return lastLines
         lastBedAt = now
-        (application as WearApplication).appScope.launch {
-            WatchSync.send(this@GoodTileService, DataLayerPaths.SLEEP_BEDTIME, SyncCodec.encodeAny(BedtimeMessage(now)))
+        lastLines = if (WatchScheduleStore.sleepAction(this) == SleepAction.UP) {
+            WatchImUp.record(this, Instant.ofEpochMilli(now))
+            listOf("GOOD", "MORNING")
+        } else {
+            WatchScheduleStore.recordLocalBed(this, now)
+            (application as WearApplication).appScope.launch {
+                WatchSync.send(this@GoodTileService, DataLayerPaths.SLEEP_BEDTIME, SyncCodec.encodeAny(BedtimeMessage(now)))
+            }
+            listOf("GOOD", "NIGHT")
         }
-        return true
+        return lastLines
     }
 
     private fun alarmLine(): String {
@@ -83,6 +96,7 @@ class GoodTileService : TileService() {
             )
         lines.forEach { strip.addContent(text(it, 26f, INK)) }
 
+        val up = WatchScheduleStore.sleepAction(this) == SleepAction.UP
         val bedButton = LayoutElementBuilders.Box.Builder()
             .setWidth(dp(96f))
             .setHeight(dp(48f))
@@ -100,10 +114,10 @@ class GoodTileService : TileService() {
                             .setOnClick(ActionBuilders.LoadAction.Builder().build())
                             .build(),
                     )
-                    .setSemantics(ModifiersBuilders.Semantics.Builder().setContentDescription("Log bedtime now").build())
+                    .setSemantics(ModifiersBuilders.Semantics.Builder().setContentDescription(if (up) "Log wake-up now" else "Log bedtime now").build())
                     .build(),
             )
-            .addContent(text("BED", 16f, LABEL))
+            .addContent(text(if (up) "UP" else "BED", 16f, LABEL))
             .build()
 
         return LayoutElementBuilders.Box.Builder()
@@ -145,5 +159,6 @@ class GoodTileService : TileService() {
         const val LABEL = 0xFFC4C9BD.toInt()
 
         @Volatile var lastBedAt = 0L
+        @Volatile var lastLines = listOf("GOOD", "NIGHT")
     }
 }

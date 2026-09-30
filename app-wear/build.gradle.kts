@@ -37,6 +37,7 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:wake"))
+    implementation(project(":core:sleep"))
     implementation(project(":core:sync"))
     implementation(project(":core:ring"))
     implementation(project(":core:lcd"))

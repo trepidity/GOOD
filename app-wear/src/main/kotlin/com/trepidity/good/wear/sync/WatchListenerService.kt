@@ -41,7 +41,7 @@ class WatchListenerService : WearableListenerService() {
                     WatchSurfaces.refresh(this)
                 }
                 instanceIdFromStatePath(path) != null -> runCatching { SyncCodec.decodeCommand(bytes) }.getOrNull()
-                    ?.takeIf { it.from == Device.PHONE }?.let(::remoteDismiss)
+                    ?.takeIf { it.from == Device.PHONE }?.let(::remoteClose)
             }
         }
     }
@@ -63,7 +63,7 @@ class WatchListenerService : WearableListenerService() {
 
     override fun onMessageReceived(event: MessageEvent) {
         when (event.path) {
-            DataLayerPaths.CMD_DISMISS -> runCatching { SyncCodec.decodeCommand(event.data) }.getOrNull()?.let(::remoteDismiss)
+            DataLayerPaths.CMD_DISMISS -> runCatching { SyncCodec.decodeCommand(event.data) }.getOrNull()?.let(::remoteClose)
             DataLayerPaths.HEALTH -> {
                 rearm()
                 val app = application as WearApplication
@@ -95,15 +95,23 @@ class WatchListenerService : WearableListenerService() {
         }
     }
 
-    /** Idempotent: an occurrence that is already over changes nothing. */
-    private fun remoteDismiss(cmd: Command) {
+    /**
+     * Closes the occurrence in the state the command carries: DISMISSED when someone stopped it, CANCELLED when the
+     * phone disarmed or moved its channel (so it never reads as a wake-up). Idempotent: one already over changes nothing.
+     */
+    private fun remoteClose(cmd: Command) {
         WakeStageService.remoteCommands.tryEmit(cmd)
         val entry = WatchScheduleStore.find(this, cmd.instanceId) ?: return
         if (entry.instance.state.isTerminal) return
-        WatchScheduleStore.update(
-            this,
-            entry.instance.copy(state = InstanceState.DISMISSED, currentStage = null, dismissedAtEpochMs = cmd.sentAtEpochMs, dismissedOn = cmd.from),
-        )
+        val closed = if (cmd.state == InstanceState.DISMISSED) {
+            entry.instance.copy(
+                state = InstanceState.DISMISSED, currentStage = null, dismissedAtStage = entry.instance.currentStage,
+                dismissedAtEpochMs = cmd.sentAtEpochMs, dismissedOn = cmd.from,
+            )
+        } else {
+            entry.instance.copy(state = cmd.state, currentStage = null)
+        }
+        WatchScheduleStore.update(this, closed)
         WatchAlarmScheduler.cancelChannel(this, entry.instance.alarmId)
         WatchSurfaces.refresh(this)
     }
