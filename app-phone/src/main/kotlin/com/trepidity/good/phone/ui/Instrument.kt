@@ -53,12 +53,15 @@ import com.trepidity.good.lcd.SegmentText
 import com.trepidity.good.lcd.WeekdayRow
 import com.trepidity.good.lcd.rememberBlink
 import com.trepidity.good.phone.CheckId
+import com.trepidity.good.sleep.SleepAction
 import com.trepidity.good.sleep.SleepSource
 import com.trepidity.good.wake.ProfileRow
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.TextStyle as DayStyle
+import java.util.Locale
 import kotlin.math.abs
 
 /** The whole app: one LCD panel, a LIGHT button and four case buttons that change meaning by mode (SPEC UX). */
@@ -123,13 +126,20 @@ fun Instrument(model: InstrumentModel) {
                     "SET", palette, onClick = model::set, modifier = Modifier.weight(1f),
                     onLongClick = { model.holdSet(); holdProgress = 0f },
                     onHoldProgress = { holdProgress = it },
-                    contentDescription = "Set. Hold two seconds: ${holdMeaning(s)}",
+                    contentDescription = "Set${if (s.mode == Mode.SLP && s.slpEdit == null) if (s.sleepAction == SleepAction.UP) ": log wake-up now" else ": log bedtime now" else ""}. Hold two seconds: ${holdMeaning(s)}",
                 )
                 CaseButton("▲", palette, onClick = model::up, modifier = Modifier.weight(1f), repeatOnHold = true, contentDescription = "Up")
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
                 CaseButton("MODE", palette, onClick = { model.mode() }, modifier = Modifier.weight(1f), contentDescription = "Mode, now ${s.mode}")
-                CaseButton("▼", palette, onClick = model::down, modifier = Modifier.weight(1f), repeatOnHold = true, contentDescription = "Down")
+                val skipHold = s.mode == Mode.ALM && s.almEdit == null
+                CaseButton(
+                    "▼", palette, onClick = model::down, modifier = Modifier.weight(1f),
+                    onLongClick = if (skipHold) { { model.holdDown(); holdProgress = 0f } } else null,
+                    onHoldProgress = if (skipHold) { { holdProgress = it } } else null,
+                    repeatOnHold = !skipHold,
+                    contentDescription = if (skipHold) "Down. Hold two seconds: skip or unskip the next alarm" else "Down",
+                )
             }
         }
     }
@@ -189,10 +199,19 @@ private fun ColumnScope.AlmFace(model: InstrumentModel, s: UiState, palette: Lcd
     WeekdayRow(mask, 30.dp, palette)
     when {
         s.banner != null -> Line(s.banner, palette, 22.dp)
-        field == null -> Line(
-            listOfNotNull(if (a.enabled) model.countdown(entry, now) ?: "ARMED" else "OFF", profileName).joinToString(" · "),
-            palette, 20.dp,
-        )
+        field == null -> {
+            val skip = model.pendingSkip(a)
+            val status = when {
+                !a.enabled -> "OFF"
+                skip != null -> "SKIP ${skip.dayOfWeek.getDisplayName(DayStyle.SHORT, Locale.US).uppercase()}"
+                else -> null
+            }
+            Line(
+                listOfNotNull(status, if (a.enabled) model.countdown(entry, now) ?: "ARMED" else null, if (skip == null) profileName else null)
+                    .joinToString(" · "),
+                palette, 20.dp,
+            )
+        }
         field.day != null -> Line("${field.code} ${if (a.repeatDays and (1 shl field.day!!) != 0) "ON" else "--"}", palette, 20.dp)
         field == AlmField.PROFILE -> Line("PRO $profileName", palette, 20.dp, blink = true)
         field == AlmField.TONE -> Line("TONE ${a.tone}", palette, 20.dp, blink = true)
@@ -240,6 +259,7 @@ private fun clock(epochMs: Long): String {
 private fun ColumnScope.SlpFace(model: InstrumentModel, s: UiState, palette: LcdPalette) {
     val sessions by model.sessions.collectAsState()
     val nights by model.nights.collectAsState()
+    val wakeLines by model.wakeLines.collectAsState()
     val edit = s.slpEdit
     val session = sessions.getOrNull(s.lap)
     val wakeDate = edit?.wakeDate ?: session?.wakeDate?.let(LocalDate::parse) ?: LocalDate.now().minusDays(s.lap.toLong())
@@ -254,6 +274,7 @@ private fun ColumnScope.SlpFace(model: InstrumentModel, s: UiState, palette: Lcd
         val bed = session?.let { clock(it.bedtimeAnchor ?: it.start) } ?: "--:--"
         val up = session?.let { clock(it.end) } ?: "--:--"
         Line("BED $bed  UP $up", palette, 18.dp)
+        wakeLines[wakeDate.toString()]?.let { Line(it, palette, 16.dp) }
     } else {
         val (label, value) = when (edit.field) {
             SlpField.BED -> "BED" to clock(edit.bed.toEpochMilli())

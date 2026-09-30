@@ -7,9 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.trepidity.good.model.Alarm
 import com.trepidity.good.model.AlarmInstance
+import com.trepidity.good.model.InstanceState
 import com.trepidity.good.model.ScheduleEntry
 import com.trepidity.good.model.ScheduleSnapshot
 import com.trepidity.good.model.SoundTarget
+import com.trepidity.good.model.StageType
 import com.trepidity.good.model.Tone
 import com.trepidity.good.model.WakeProfile
 import com.trepidity.good.phone.AppGraph
@@ -19,14 +21,19 @@ import com.trepidity.good.phone.EventLog
 import com.trepidity.good.phone.ReliabilityCheck
 import com.trepidity.good.phone.alarm.AlarmScheduler
 import com.trepidity.good.phone.alarm.ScheduleStore
+import com.trepidity.good.phone.alarm.WakeUp
 import com.trepidity.good.phone.data.SleepSessionEntity
 import com.trepidity.good.phone.sleep.SleepApiReceiver
+import com.trepidity.good.phone.sleep.SleepSyncWorker
 import com.trepidity.good.phone.sync.PhoneSync
 import com.trepidity.good.phone.wake.WakeService
 import com.trepidity.good.sleep.Night
+import com.trepidity.good.sleep.NightWindow
+import com.trepidity.good.sleep.SleepAction
 import com.trepidity.good.sleep.SleepMetrics
 import com.trepidity.good.wake.InstanceIds
 import com.trepidity.good.wake.ProfileRow
+import com.trepidity.good.wake.WakeBehaviour
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -80,6 +87,7 @@ data class UiState(
     val snapshot: ScheduleSnapshot? = null,
     val sleepGoalMin: Int = 450,
     val bedtimeReminder: Boolean = true,
+    val sleepAction: SleepAction = SleepAction.BED,
 )
 
 /** Things only the Activity can do: open settings, ask for permissions, pick an export file. */
@@ -117,14 +125,22 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
             alarmsRepo.seed()
             refreshSnapshot(alarmsRepo.rescheduleAll("app open"))
             sleepRepo.syncRecent()
+            SleepSyncWorker.scheduleDaily(ctx)
         }
-        viewModelScope.launch(Dispatchers.IO) { sessions.collect { nights.value = sleepRepo.nights() } }
+        viewModelScope.launch(Dispatchers.IO) {
+            sessions.collect {
+                nights.value = sleepRepo.nights()
+                loadWakeLines()
+            }
+        }
         runChecks()
+        refreshSleepAction()
     }
 
     fun onResume() {
         _state.update { it.copy(snapshot = ScheduleStore.load(ctx)) }
         runChecks()
+        refreshSleepAction()
     }
 
     // ---- The five case buttons --------------------------------------------------------------------------
@@ -212,6 +228,35 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** ALM, hold ▼ 2 s: skip the shown channel's next occurrence, or clear a pending skip (skip spec). */
+    fun holdDown() {
+        val s = _state.value
+        if (s.mode != Mode.ALM || s.almEdit != null) return
+        val a = alarm(s.channel)
+        val pending = pendingSkip(a)
+        val entry = entryFor(s.channel)
+        val date = entry?.let { Instant.ofEpochMilli(it.instance.scheduledAtEpochMs).atZone(ZoneId.systemDefault()).toLocalDate() }
+        when {
+            pending != null -> skip(s.channel, null, "UNSKIP")
+            a.repeatDays == 0 -> banner("ONCE USE OFF")
+            !a.enabled || entry == null || date == null -> banner("OFF")
+            entry.instance.state != InstanceState.SCHEDULED -> banner("RINGING")
+            else -> skip(s.channel, date.toString(), "SKIPPED")
+        }
+    }
+
+    private fun skip(channel: Long, date: String?, text: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            alarmsRepo.setSkip(channel, date)
+            refreshSnapshot()
+            banner(text)
+        }
+    }
+
+    /** The pending skip date of [a], or null; an old date is ignored (NextOccurrence only compares future dates). */
+    fun pendingSkip(a: Alarm, today: LocalDate = LocalDate.now()): LocalDate? =
+        a.skipNextDate?.let(LocalDate::parse)?.takeIf { !it.isBefore(today) }
+
     private fun toggleArmed(channel: Long) {
         val armed = !alarm(channel).enabled
         viewModelScope.launch(Dispatchers.IO) {
@@ -227,13 +272,55 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         val edit = s.slpEdit
         if (edit == null) {
             val now = Instant.now()
-            prefs.lastBedtime = now.toEpochMilli()
-            viewModelScope.launch(Dispatchers.IO) { sleepRepo.recordBedtime(now, "PHONE") }
-            banner("GOOD NIGHT")
+            viewModelScope.launch(Dispatchers.IO) {
+                if (sleepRepo.nextAction(now) == SleepAction.UP) {
+                    WakeUp.record(ctx, now)
+                    refreshSnapshot()
+                    banner("GOOD MORNING")
+                } else {
+                    prefs.lastBedtime = now.toEpochMilli()
+                    sleepRepo.recordBedtime(now, "PHONE")
+                    banner("GOOD NIGHT")
+                }
+                _state.update { it.copy(sleepAction = sleepRepo.nextAction()) }
+            }
             return
         }
         val next = SlpField.entries.getOrNull(edit.field.ordinal + 1)
         if (next == null) saveSleepEdit(edit) else _state.update { it.copy(slpEdit = edit.copy(field = next)) }
+    }
+
+    private fun refreshSleepAction() {
+        viewModelScope.launch(Dispatchers.IO) { _state.update { it.copy(sleepAction = sleepRepo.nextAction()) } }
+    }
+
+    /** Wake date (ISO) → the SLP lap's wake line ("WOKE SND +6", "UP EARLY", …) for the last 31 nights (#7). */
+    val wakeLines = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    private suspend fun loadWakeLines() {
+        val zone = ZoneId.systemDefault()
+        val since = Instant.now().minus(31, ChronoUnit.DAYS).toEpochMilli()
+        wakeLines.value = AppGraph.db(ctx).instances().since(since).map { it.toModel() }
+            .filter { it.alarmId > 0 }
+            .groupBy { NightWindow.wakeDateOf(Instant.ofEpochMilli(it.scheduledAtEpochMs), zone)?.toString() }
+            .mapNotNull { (date, list) ->
+                val line = list.sortedBy { it.scheduledAtEpochMs }.firstNotNullOfOrNull { WakeBehaviour.of(it) }?.let(::wakeLine)
+                if (date == null || line == null) null else date to line
+            }.toMap()
+    }
+
+    private fun wakeLine(b: WakeBehaviour): String = when (b) {
+        is WakeBehaviour.Dismissed -> "WOKE ${stageCode(b.stage)} +${b.minutesAfterFirstStage}"
+        WakeBehaviour.UpEarly -> "UP EARLY"
+        WakeBehaviour.Skipped -> "SKIPPED"
+        WakeBehaviour.NoAnswer -> "NO ANSWER"
+    }
+
+    private fun stageCode(t: StageType) = when (t) {
+        StageType.LIGHT -> "LIT"
+        StageType.HAPTIC -> "BUZ"
+        StageType.SOUND -> "SND"
+        StageType.ESCALATE -> "MAX"
     }
 
     private fun startSleepEdit(s: UiState) {
