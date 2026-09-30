@@ -117,9 +117,9 @@ For a night with a `SKIPPED` occurrence and no WAKE anchor, `rebuild` infers one
 | `WakeAnchorMessage` (new) | `core/model` | `(atEpochMs: Long)` | `/sleep/wake`, watch → phone |
 | `WakeStateMachine.reduce` (changed) | `core/wake` | unchanged | Sets `firstStageAt` once; Dismiss keeps `dismissedAtStage` |
 | `ScheduleBuilder.decide` (changed) | `core/wake` | `ChannelDecision(active, missed, skipped, cancelled)` | Branches below |
+| `ScheduleBuilder.current` | `core/wake` | `(rows: List<AlarmInstance>) -> AlarmInstance?` | Latest by scheduled time, ignoring `CANCELLED` |
 | `imUpTargets` | `core/wake` | `(entries, now, zone) -> List<ScheduleEntry>` | Non-terminal, channel ≥ 1, due on `now`'s local date before 14:00 |
 | `WakeBehaviour.of` | `core/wake` | `(AlarmInstance) -> WakeBehaviour?` | Table above |
-| `ScheduleMerge.merge` (changed) | `core/sync` | unchanged | A locally closed `SKIPPED` entry doesn't override the incoming snapshot, because the phone owns skips |
 | `nextSleepAction` | `core/sleep` | `(lastBed, lastWake, now, zone) -> SleepAction` | `UP` if `lastBed` is in the current night window and not followed by `lastWake` |
 | `WakeInference.infer` | `core/sleep` | `(skippedAt, candidates, nightStart, window) -> Instant?` | Inferred wake rule |
 
@@ -129,11 +129,12 @@ For a night with a `SKIPPED` occurrence and no WAKE anchor, `rebuild` infers one
 2. **Ringing, channel changed:** `live`, `FIRING`, and disabled or time changed → `cancelled`; search after `max(now, T)`.
 3. **Skip:** `live`, `SCHEDULED`, `date(T) == skipNextDate` → `skipped`; search after `T`.
 4. **Overdue unchanged:** as today (keep, so it rings late).
-5. **Undo:** `last.state == SKIPPED`, `T` in the future, `date(T) != skipNextDate` → search from `now`; `NextOccurrence` finds `T` again with the same deterministic ID, as `SCHEDULED`.
-6. **Recompute:** as today. If `last` was non-terminal and the result is null or has a different ID → `cancelled`.
-7. Existing missed and terminal handling unchanged.
+5. **Recompute:** `live` otherwise → search from `now`. Same ID → keep `last` as is. Null or a different ID → the new one is active and `last` is `cancelled`.
+6. Existing missed and terminal handling unchanged.
 
-Both skip branches depend on `SKIPPED` coming from SKIP only. I'M UP uses `DISMISSED` and edits use `CANCELLED`, so undoing a skip can never revive anything else. `ScheduleMerge`'s `SKIPPED` exception lets an undo reach a watch that holds a phone-sent `SKIPPED` copy.
+**Which row is the channel's current occurrence.** Today `rescheduleAll` passes `decide` the channel's row with the latest scheduled time. Once replaced occurrences are closed as `CANCELLED`, that row can be a cancelled future one: move 7:00 to 6:30 and the cancelled 7:00 row would make the next run roll past 6:30. So `ScheduleBuilder.current(rows)` picks the latest row **that isn't `CANCELLED`**, and `rescheduleAll` passes that as `last`. A cancelled row's ID can be reused: when the recompute lands on it again, `rescheduleAll` overwrites it as `SCHEDULED`.
+
+**Undo needs no branch of its own.** After a skip, the channel's latest occurrence is the next one (say Thursday), not the skipped Wednesday. Clearing the skip makes the recompute find Wednesday again. Its deterministic ID is the skipped row's, which `rescheduleAll` overwrites as `SCHEDULED`, and Thursday is closed as `CANCELLED`; it's recreated when Wednesday is over. `ScheduleMerge` needs no change: phone snapshots only carry active occurrences, so a watch never holds a phone-sent `SKIPPED` copy.
 
 ### Data changes
 
@@ -181,7 +182,7 @@ On the phone, the existing `remoteDismiss` closes each target and calls `onWake(
 | --- | --- |
 | I'M UP on the watch, phone unreachable | Watch stops its own targets at once; the dismisses and `/sleep/wake` wait in the outbox. If the phone's own alarm is due before the outbox flushes, the phone still rings. The watch alone can't stop the phone (same as a watch dismiss today, F5) |
 | I'M UP after the phone's stages started | Target is DISMISSED; `WakeService` stops through `remoteCommands` |
-| SKIP undone after the watch already cancelled | The phone reopens the occurrence and pushes the snapshot; the watch accepts it (merge exception) and re-registers |
+| SKIP undone after the watch already cancelled | The phone reopens the occurrence and pushes the snapshot; the watch has no closed copy of it, so it re-registers |
 | SKIP then I'M UP the same morning | The skipped occurrence is already terminal, so it's not a target. I'M UP only records the WAKE anchor |
 | Channel disarmed while the watch rings but the phone never started (its ring service failed) | The phone's occurrence is `SCHEDULED`, so it's cancelled and the close command is sent only for `FIRING`. The watch's alarms are cancelled by the snapshot, but a running stage continues until its hold or auto-silence. Accepted: the phone starts first in every profile |
 | Unlock at 03:00, skipped alarm 06:30, next unlock 09:10 | Inferred wake 09:10 (candidates before the skipped time are ignored) |
@@ -198,13 +199,13 @@ Following `~/.claude/skills/test-selection`: tests only for pure decisions that 
 | Test | Guards |
 | --- | --- |
 | `decide`: a pending occurrence on `skipNextDate` is closed `SKIPPED` and the next repeat day becomes active | Skip prevents ringing |
-| `decide`: clearing the skip before `T` reopens the same occurrence ID as `SCHEDULED` | Undo works |
+| `decide`: with Thursday pending after a Wednesday skip, clearing the skip makes Wednesday's ID active again and cancels Thursday | Undo works |
 | `decide`: a FIRING occurrence on `skipNextDate` is left ringing | Skip never cuts off a running wake-up |
 | `decide`: disarming during FIRING returns it `cancelled` | #6 |
 | `decide`: moving the time of a SCHEDULED occurrence returns the old one `cancelled`; changing only the profile keeps it | #5, and no spurious cancel |
+| `decide` + `current`: after moving 7:00 to 6:30, the next run keeps 6:30 active (the cancelled 7:00 row is not current) | Moving an alarm earlier still rings today |
 | `imUpTargets`: 05:00 press → today's 06:30 is a target; 22:00 press → tomorrow's 06:30 is not; 13:59 vs 14:00 boundary; channel 0 test alarm excluded | Same-day, before-14:00 rule |
 | `nextSleepAction`: BED in window with no WAKE → UP; WAKE after → BED; BED from the previous night → BED; 14:00–18:00 → BED | The toggle never gets stuck on UP |
-| `ScheduleMerge`: a local `SKIPPED` doesn't override an incoming `SCHEDULED`; a local `DISMISSED` still does | Undo reaches the watch; watch dismisses stay closed |
 | `WakeStateMachine`: `firstStageAt` is set by the first stage only; a dismiss keeps `dismissedAtStage` | #7 data |
 | `WakeBehaviour.of`: dismissed in SOUND 6 min after the first stage; dismissed before any stage → `UpEarly` | #7, and I'M UP kept apart |
 | `WakeInference.infer`: ignores candidates before the skipped time; picks the earliest after; rejects one ≥ 24 h after the night start and one outside the window | #1 |
