@@ -38,13 +38,13 @@ Closed as won't do: #2 (automatic awake detection; I'M UP stays manual) and #4 (
 | Input | Result |
 | --- | --- |
 | Hold **▼** 2 s on a repeating channel whose next occurrence is `SCHEDULED` | `skipNextDate` = that occurrence's local date. Banner `SKIPPED`. Status line: `SKIP WED · NEXT THU 6:30 · GENTLE` |
-| Hold **▼** 2 s while a skip is pending (`skipNextDate` ≥ today) | Skip cleared. Banner `UNSKIP`. The occurrence returns |
+| Hold **▼** 2 s while a skip is pending (the skipped occurrence is still ahead) | Skip cleared. Banner `UNSKIP`. The occurrence returns |
 | Hold **▼** 2 s on a one-shot channel | No change. Banner `ONCE — USE OFF` |
 | Hold **▼** 2 s while the occurrence is ringing | No change. The ring screen's STOP is the control |
 
 - Outside edit mode, ▼ no longer repeats when held, so the 2-s hold doesn't cycle channels. ▲ is unchanged. In edit mode ▼ keeps its repeat.
 - Arm, disarm and save still clear `skipNextDate`, as today.
-- A skip is "pending" only while `skipNextDate` ≥ today. An old date is harmless and ignored for display, because `NextOccurrence` only ever compares it with future dates.
+- A skip is "pending" only while the skipped occurrence is still ahead: `skipNextDate` is after today, or is today and the alarm's time hasn't passed yet. So `SKIP THU` disappears once Thursday's 6:30 has passed, and a hold ▼ then skips the next occurrence. An old date is harmless and ignored for display, because `NextOccurrence` only ever compares it with future times.
 - The skipped occurrence is closed as **`SKIPPED`**. Event log: `SKIP` / `UNSKIP`.
 - **Sleep is unaffected.** No anchor is written.
 

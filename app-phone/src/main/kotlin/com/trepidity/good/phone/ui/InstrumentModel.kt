@@ -49,6 +49,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 
 enum class Mode { ALM, SLP, PRO, CHK }
@@ -255,9 +256,13 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** The pending skip date of [a], or null; an old date is ignored (NextOccurrence only compares future dates). */
-    fun pendingSkip(a: Alarm, today: LocalDate = LocalDate.now()): LocalDate? =
-        a.skipNextDate?.let(LocalDate::parse)?.takeIf { !it.isBefore(today) }
+    /**
+     * The pending skip date of [a], or null. A skip counts only while the skipped occurrence is still ahead: once
+     * that day's alarm time has passed, the skip is spent (NextOccurrence only compares future times).
+     */
+    fun pendingSkip(a: Alarm, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): LocalDate? =
+        a.skipNextDate?.let(LocalDate::parse)
+            ?.takeIf { ZonedDateTime.of(it, LocalTime.of(a.hour, a.minute), zone).toInstant().isAfter(now) }
 
     private fun toggleArmed(channel: Long) {
         val armed = !alarm(channel).enabled
@@ -275,15 +280,16 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         if (edit == null) {
             val now = Instant.now()
             viewModelScope.launch(Dispatchers.IO) {
-                if (sleepRepo.nextAction(now) == SleepAction.UP) {
+                // Decide, then acknowledge the press at once; the writes below can take a moment (Health Connect).
+                val action = sleepRepo.nextAction(now)
+                banner(if (action == SleepAction.UP) "GOOD MORNING" else "GOOD NIGHT")
+                if (action == SleepAction.UP) {
                     WakeUp.record(ctx, now)
                     refreshSnapshot()
                     loadWakeLines()
-                    banner("GOOD MORNING")
                 } else {
                     prefs.lastBedtime = now.toEpochMilli()
                     sleepRepo.recordBedtime(now, "PHONE")
-                    banner("GOOD NIGHT")
                 }
                 _state.update { it.copy(sleepAction = sleepRepo.nextAction()) }
             }
@@ -304,16 +310,19 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { loadWakeLines() }
     }
 
+    /** Never throws: it runs inside the sessions collector, and a failed read must not stop the nights updating. */
     private suspend fun loadWakeLines() {
-        val zone = ZoneId.systemDefault()
-        val since = Instant.now().minus(31, ChronoUnit.DAYS).toEpochMilli()
-        wakeLines.value = AppGraph.db(ctx).instances().since(since).map { it.toModel() }
-            .filter { it.alarmId > 0 }
-            .groupBy { NightWindow.wakeDateOf(Instant.ofEpochMilli(it.scheduledAtEpochMs), zone)?.toString() }
-            .mapNotNull { (date, list) ->
-                val line = list.sortedBy { it.scheduledAtEpochMs }.firstNotNullOfOrNull { WakeBehaviour.of(it) }?.let(::wakeLine)
-                if (date == null || line == null) null else date to line
-            }.toMap()
+        runCatching {
+            val zone = ZoneId.systemDefault()
+            val since = Instant.now().minus(31, ChronoUnit.DAYS).toEpochMilli()
+            wakeLines.value = AppGraph.db(ctx).instances().since(since).map { it.toModel() }
+                .filter { it.alarmId > 0 }
+                .groupBy { NightWindow.wakeDateOf(Instant.ofEpochMilli(it.scheduledAtEpochMs), zone)?.toString() }
+                .mapNotNull { (date, list) ->
+                    val line = list.sortedBy { it.scheduledAtEpochMs }.firstNotNullOfOrNull { WakeBehaviour.of(it) }?.let(::wakeLine)
+                    if (date == null || line == null) null else date to line
+                }.toMap()
+        }.onFailure { android.util.Log.w("GoodInstrument", "Wake lines failed to load", it) }
     }
 
     private fun wakeLine(b: WakeBehaviour): String = when (b) {

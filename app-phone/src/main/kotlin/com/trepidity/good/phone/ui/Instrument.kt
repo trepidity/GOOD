@@ -200,7 +200,7 @@ private fun ColumnScope.AlmFace(model: InstrumentModel, s: UiState, palette: Lcd
     when {
         s.banner != null -> Line(s.banner, palette, 22.dp)
         field == null -> {
-            val skip = model.pendingSkip(a)
+            val skip = model.pendingSkip(a, now)
             val status = when {
                 !a.enabled -> "OFF"
                 skip != null -> "SKIP ${skip.dayOfWeek.getDisplayName(DayStyle.SHORT, Locale.US).uppercase()}"
