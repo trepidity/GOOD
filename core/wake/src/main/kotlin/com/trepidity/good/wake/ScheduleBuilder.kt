@@ -7,6 +7,7 @@ import com.trepidity.good.model.WakeProfile
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 
 object InstanceIds {
     /** Deterministic, so re-running the scheduler for the same occurrence keeps its identity and state. */
@@ -57,7 +58,10 @@ object ScheduleBuilder {
             val lastT = Instant.ofEpochMilli(last.scheduledAtEpochMs)
             val live = !last.state.isTerminal && now.isBefore(WakePlanner.silenceAt(lastT, profile))
             val overdue = live && !now.isBefore(lastT)
-            val unchanged = alarm.enabled && lastT.atZone(zone).toLocalTime() == LocalTime.of(alarm.hour, alarm.minute)
+            // Compared as instants, not local times: a 02:30 alarm on spring-forward morning rings at 03:30,
+            // which is still the alarm's occurrence for that date.
+            val unchanged = alarm.enabled &&
+                ZonedDateTime.of(lastT.atZone(zone).toLocalDate(), LocalTime.of(alarm.hour, alarm.minute), zone).toInstant() == lastT
             val onSkipDate = lastT.atZone(zone).toLocalDate().toString() == alarm.skipNextDate
             when {
                 live && last.state == InstanceState.FIRING && unchanged -> return ChannelDecision(last)

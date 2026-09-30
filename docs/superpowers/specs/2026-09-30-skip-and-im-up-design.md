@@ -202,6 +202,7 @@ Following `~/.claude/skills/test-selection`: tests only for pure decisions that 
 | `decide`: with Thursday pending after a Wednesday skip, clearing the skip makes Wednesday's ID active again and cancels Thursday | Undo works |
 | `decide`: a FIRING occurrence on `skipNextDate` is left ringing | Skip never cuts off a running wake-up |
 | `decide`: disarming during FIRING returns it `cancelled` | #6 |
+| `decide`: a FIRING 02:30 alarm moved to 03:30 by spring-forward is kept (`unchanged` compares instants, not local times) | A ringing gap-hour alarm is not cancelled by a reschedule |
 | `decide`: moving the time of a SCHEDULED occurrence returns the old one `cancelled`; changing only the profile keeps it | #5, and no spurious cancel |
 | `decide` + `current`: after moving 7:00 to 6:30, the next run keeps 6:30 active (the cancelled 7:00 row is not current) | Moving an alarm earlier still rings today |
 | `decide` + `current`: skip Thursday, disarm, re-arm → Thursday's ID is active again (the `SKIPPED` row is not current) | A skip followed by disarm and re-arm doesn't lose the skipped day |

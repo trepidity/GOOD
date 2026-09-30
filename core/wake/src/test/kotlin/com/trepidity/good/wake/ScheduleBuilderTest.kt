@@ -153,6 +153,19 @@ class ScheduleBuilderTest {
         assertNull(second.cancelled)
     }
 
+    /**
+     * Gate: a ringing gap-hour alarm is not cancelled by a reschedule. 2026-03-08 is spring-forward in
+     * America/Chicago: 02:30 doesn't exist, so the occurrence rings at 03:30, and its local time no longer
+     * equals the alarm's.
+     */
+    @Test
+    fun `a ringing alarm moved by the spring-forward gap keeps ringing`() {
+        val gapAlarm = daily.copy(hour = 2, minute = 30)
+        val fireAt = NextOccurrence.nextFireTime(gapAlarm, ZonedDateTime.of(2026, 3, 8, 0, 0, 0, 0, zone).toInstant(), zone)!!
+        assertEquals(ZonedDateTime.of(2026, 3, 8, 3, 30, 0, 0, zone).toInstant(), fireAt)
+        val firing = instance(InstanceState.FIRING, fireAt)
+        assertSame(firing, decide(gapAlarm, firing, now = fireAt.plusSeconds(5 * 60)).active)
+    }
 
     /** Gate: #6 — moving a ringing alarm to a time already past today lands tomorrow and never re-rings today. */
     @Test
