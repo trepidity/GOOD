@@ -8,6 +8,85 @@ A gentle, two-device alarm for Android and Wear OS. Your phone's screen lights u
 
 The full design is in [docs/SPEC.md](docs/SPEC.md). The review behind the latest changes is in [docs/REVIEW.md](docs/REVIEW.md).
 
+## What it looks like
+
+Real screenshots of the built app on emulators (Android 16 phone, Wear OS 5 round watch), not mockups. The whole app is one sports-watch instrument: MODE (or a sideways swipe) cycles ALM → SLP → PRO → CHK, and SET, ▲ and ▼ change meaning by mode. Full-size images are in [docs/screenshots](docs/screenshots).
+
+**Phone: one instrument, four modes**
+
+<table>
+<tr>
+<td><img src="docs/screenshots/phone/01-alm.jpg" width="190" alt="ALM mode: 6:30 on AL1 with countdown"></td>
+<td><img src="docs/screenshots/phone/02-alm-set-days.jpg" width="190" alt="ALM set mode editing repeat days"></td>
+<td><img src="docs/screenshots/phone/03-slp.jpg" width="190" alt="SLP mode, empty history"></td>
+<td><img src="docs/screenshots/phone/04-slp-good-night.jpg" width="190" alt="SLP mode after logging bedtime"></td>
+</tr>
+<tr>
+<td><b>ALM</b>: AL1 armed, countdown and profile, all four channels</td>
+<td><b>ALM · SET</b>: hour, minute, then each weekday flashes; ▲▼ toggles it</td>
+<td><b>SLP</b>: last night, bed → up, 7-night graph, averages, debt</td>
+<td><b>SLP · SET</b>: logs bedtime now</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/phone/05-slp-edit.jpg" width="190" alt="SLP edit with BED flashing"></td>
+<td><img src="docs/screenshots/phone/06-pro.jpg" width="190" alt="PRO mode, Gentle profile as an interval timer"></td>
+<td><img src="docs/screenshots/phone/07-chk.jpg" width="190" alt="CHK self-test"></td>
+<td><img src="docs/screenshots/phone/08-glow.jpg" width="190" alt="Teal night glow"></td>
+</tr>
+<tr>
+<td><b>SLP · hold SET</b>: edit the night: BED → WAKE → GOAL → REMIND</td>
+<td><b>PRO</b>: the wake profile as an interval timer; hold SET for a 60-s preview</td>
+<td><b>CHK</b>: self-test strip; failing items blink</td>
+<td><b>LIGHT</b>: teal glow for 3 s, no white UI at night</td>
+</tr>
+</table>
+
+**Ringing: the LCD is the sunrise** (captured from the 60-second preview)
+
+<table>
+<tr>
+<td><img src="docs/screenshots/ringing/01-t-minus-9-red.jpg" width="190" alt="Ringing, deep red"></td>
+<td><img src="docs/screenshots/ringing/02-t-minus-4-amber.jpg" width="190" alt="Ringing, amber"></td>
+<td><img src="docs/screenshots/ringing/03-t-minus-3-light-amber.jpg" width="190" alt="Ringing, light amber"></td>
+<td><img src="docs/screenshots/ringing/04-t-zero-white.jpg" width="190" alt="Ringing, warm white"></td>
+</tr>
+<tr>
+<td><b>T−9</b>: light stage starts, deep red</td>
+<td><b>T−4</b>: amber; the watch buzzes from T−3</td>
+<td><b>T−3</b>: the panel keeps brightening</td>
+<td><b>T</b>: warm white; sound starts at about 5% and rises. Hold STOP 2 s</td>
+</tr>
+</table>
+
+**Watch: the same modes on the wrist** (OnePlus Watch 2R, 454 × 454 round)
+
+<table>
+<tr>
+<td><img src="docs/screenshots/watch/01-alm.jpg" width="150" alt="Watch ALM"></td>
+<td><img src="docs/screenshots/watch/02-slp.jpg" width="150" alt="Watch SLP, 7:42 from OHealth"></td>
+<td><img src="docs/screenshots/watch/03-pro.jpg" width="150" alt="Watch PRO"></td>
+<td><img src="docs/screenshots/watch/04-pro-int1.jpg" width="150" alt="Watch PRO, INT 1 light 10:00"></td>
+</tr>
+<tr>
+<td><b>ALM</b>: hold to arm or disarm (sent to the phone)</td>
+<td><b>SLP</b>: 7:42 from OHealth, goal 7:30; hold to log bedtime</td>
+<td><b>PRO</b>: the next alarm's profile</td>
+<td><b>PRO · INT 1</b>: light lead 10:00</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/watch/05-chk.jpg" width="150" alt="Watch CHK"></td>
+<td><img src="docs/screenshots/watch/06-glow.jpg" width="150" alt="Watch teal glow"></td>
+<td><img src="docs/screenshots/watch/07-ringing.jpg" width="150" alt="Watch ringing, amber on black"></td>
+<td></td>
+</tr>
+<tr>
+<td><b>CHK</b>: EXA FSI SCR NTF BODY LINK ACT, plus BUZ and SND tests</td>
+<td><b>GLOW</b>: tap the mode tabs</td>
+<td><b>Ringing</b>: amber on black; hold anywhere 2 s</td>
+<td></td>
+</tr>
+</table>
+
 ## Status: M1–M4 code complete, ready for UAT
 
 Milestones M1–M4 are built, and both apps compile, pass lint and run on emulators. Each milestone's gate, such as 7 nights without a miss or dismiss reaching the other device within 2 s, is an on-device check that starts with UAT. M5 (burn-in) is 30 nights of real use.
