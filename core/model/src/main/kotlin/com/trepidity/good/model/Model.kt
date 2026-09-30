@@ -110,8 +110,9 @@ data class Alarm(
 )
 
 @Serializable
-enum class InstanceState { SCHEDULED, FIRING, DISMISSED, SILENCED, SKIPPED;
-    val isTerminal: Boolean get() = this == DISMISSED || this == SILENCED || this == SKIPPED
+enum class InstanceState { SCHEDULED, FIRING, DISMISSED, SILENCED, SKIPPED, CANCELLED;
+    /** CANCELLED = closed because its channel was edited or disarmed, not because anything happened. */
+    val isTerminal: Boolean get() = this != SCHEDULED && this != FIRING
 }
 
 /** One occurrence of an alarm. [scheduledAtEpochMs] is the alarm time T. */
@@ -124,6 +125,10 @@ data class AlarmInstance(
     val currentStage: StageType? = null,
     val dismissedAtEpochMs: Long? = null,
     val dismissedOn: Device? = null,
+    /** When the first stage started; null if none did (e.g. closed by I'M UP before ringing). */
+    val firstStageAtEpochMs: Long? = null,
+    /** The stage that was running when it was dismissed; null for a dismiss before any stage. */
+    val dismissedAtStage: StageType? = null,
 )
 
 /** What the phone publishes to the watch at `/schedule`. */
@@ -149,6 +154,8 @@ data class Command(
     val instanceId: String,
     val sentAtEpochMs: Long,
     val from: Device,
+    /** The state the receiver closes the occurrence in: DISMISSED, or CANCELLED when its channel was disarmed or edited. */
+    val state: InstanceState = InstanceState.DISMISSED,
 )
 
 /** Watch → phone: arm or disarm channel [alarmId] (`/cmd/toggle`). */
@@ -158,6 +165,10 @@ data class ToggleCommand(val alarmId: Long, val sentAtEpochMs: Long)
 /** Watch → phone: the bed button was pressed (`/sleep/bedtime`). */
 @Serializable
 data class BedtimeMessage(val atEpochMs: Long)
+
+/** Watch → phone: I'M UP was pressed (`/sleep/wake`). */
+@Serializable
+data class WakeAnchorMessage(val atEpochMs: Long)
 
 /** Watch → phone: an asleep/awake transition from Health Services passive monitoring (`/sleep/signal`). */
 @Serializable
@@ -177,4 +188,7 @@ data class SleepSummary(
     val wakeEpochMs: Long?,
     val goalMin: Int,
     val fromHealthConnect: Boolean,
+    /** The latest bed-button press and wake anchor (dismiss or I'M UP) the phone knows of; they drive the watch's BED/UP toggle. */
+    val lastBedAnchorEpochMs: Long? = null,
+    val lastWakeAnchorEpochMs: Long? = null,
 )

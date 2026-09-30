@@ -39,4 +39,19 @@ class WakeStateMachineTest {
         assertEquals(InstanceState.SILENCED, after.state)
         assertEquals(done, after)
     }
+
+    /** Gate: #7 wake behaviour — minutes are counted from the first stage, not from a later one. */
+    @Test
+    fun `the first stage time is set once and kept through later stages`() {
+        val light = WakeStateMachine.reduce(scheduled, WakeEvent.StageStarted(StageType.LIGHT), now, profile)
+        val sound = WakeStateMachine.reduce(light, WakeEvent.StageStarted(StageType.SOUND), now.plusSeconds(600), profile)
+        assertEquals(now.toEpochMilli(), sound.firstStageAtEpochMs)
+    }
+
+    /** Gate: #7 wake behaviour — the stage you dismissed in survives the dismiss. */
+    @Test
+    fun `dismiss keeps the stage that was running`() {
+        val firing = scheduled.copy(state = InstanceState.FIRING, currentStage = StageType.SOUND)
+        assertEquals(StageType.SOUND, WakeStateMachine.reduce(firing, WakeEvent.Dismiss(Device.PHONE), now, profile).dismissedAtStage)
+    }
 }

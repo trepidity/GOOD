@@ -11,6 +11,7 @@ object DataLayerPaths {
     const val CMD_DISMISS = "/cmd/dismiss"
     const val CMD_TOGGLE = "/cmd/toggle"
     const val SLEEP_BEDTIME = "/sleep/bedtime"
+    const val SLEEP_WAKE = "/sleep/wake"
     const val SLEEP_SIGNAL = "/sleep/signal"
     const val SLEEP_SUMMARY = "/sleep/summary"
     const val INSTANCE_PREFIX = "/instance/"
