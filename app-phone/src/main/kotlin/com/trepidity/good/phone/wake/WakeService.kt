@@ -189,7 +189,7 @@ class WakeService : Service() {
         val next = WakeStateMachine.reduce(e.instance, WakeEvent.Dismiss(Device.PHONE), now, e.profile)
         if (!preview) {
             InstanceEvents.record(this, next)
-            val cmd = Command(next.id, now.toEpochMilli(), Device.PHONE)
+            val cmd = Command(next.id, now.toEpochMilli(), Device.PHONE, stage = e.instance.currentStage)
             (application as GoodApplication).appScope.launch {
                 val reached = runCatching { PhoneSync.sendDismiss(this@WakeService, next, cmd) }.getOrDefault(0)
                 EventLog.log(this@WakeService, "DISMISS", "${next.id} at stage ${e.instance.currentStage} · watch nodes reached: $reached")

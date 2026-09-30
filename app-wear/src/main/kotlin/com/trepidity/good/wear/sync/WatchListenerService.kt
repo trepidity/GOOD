@@ -105,7 +105,7 @@ class WatchListenerService : WearableListenerService() {
         if (entry.instance.state.isTerminal) return
         val closed = if (cmd.state == InstanceState.DISMISSED) {
             entry.instance.copy(
-                state = InstanceState.DISMISSED, currentStage = null, dismissedAtStage = entry.instance.currentStage,
+                state = InstanceState.DISMISSED, currentStage = null, dismissedAtStage = cmd.stage ?: entry.instance.currentStage,
                 dismissedAtEpochMs = cmd.sentAtEpochMs, dismissedOn = cmd.from,
             )
         } else {

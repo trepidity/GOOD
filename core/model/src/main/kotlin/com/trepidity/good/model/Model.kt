@@ -156,6 +156,11 @@ data class Command(
     val from: Device,
     /** The state the receiver closes the occurrence in: DISMISSED, or CANCELLED when its channel was disarmed or edited. */
     val state: InstanceState = InstanceState.DISMISSED,
+    /**
+     * The sender's stage when it was dismissed; the receiver records it as `dismissedAtStage`, since its own copy
+     * may be a stage behind (or none, when only the sender was ringing). Null = unknown; old payloads decode as null.
+     */
+    val stage: StageType? = null,
 )
 
 /** Watch → phone: arm or disarm channel [alarmId] (`/cmd/toggle`). */

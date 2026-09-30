@@ -68,7 +68,7 @@ class PhoneListenerService : WearableListenerService() {
         EventLog.log(this, "DISMISS_REMOTE", "${cmd.instanceId} from ${cmd.from} as ${cmd.state} after ${System.currentTimeMillis() - cmd.sentAtEpochMs} ms")
         val closed = if (cmd.state == InstanceState.DISMISSED) {
             entry.instance.copy(
-                state = InstanceState.DISMISSED, currentStage = null, dismissedAtStage = entry.instance.currentStage,
+                state = InstanceState.DISMISSED, currentStage = null, dismissedAtStage = cmd.stage ?: entry.instance.currentStage,
                 dismissedAtEpochMs = cmd.sentAtEpochMs, dismissedOn = cmd.from,
             )
         } else {

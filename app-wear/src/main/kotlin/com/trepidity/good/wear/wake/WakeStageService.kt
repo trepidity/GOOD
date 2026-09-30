@@ -164,7 +164,7 @@ class WakeStageService : Service() {
         WatchScheduleStore.update(this, next)
         WatchAlarmScheduler.cancelChannel(this, next.alarmId)
         (application as WearApplication).appScope.launch {
-            val sent = runCatching { WatchSync.sendDismiss(this@WakeStageService, next, Command(next.id, now.toEpochMilli(), Device.WATCH)) }
+            val sent = runCatching { WatchSync.sendDismiss(this@WakeStageService, next, Command(next.id, now.toEpochMilli(), Device.WATCH, stage = e.instance.currentStage)) }
             Log.i(TAG, "Dismiss delivered to phone now: ${sent.getOrNull()}")
         }
         WatchSurfaces.refresh(this)

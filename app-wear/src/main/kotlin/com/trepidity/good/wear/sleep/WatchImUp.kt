@@ -30,7 +30,7 @@ object WatchImUp {
         val app = context.applicationContext as WearApplication
         for (e in targets) {
             val closed = WakeStateMachine.reduce(e.instance, WakeEvent.Dismiss(Device.WATCH), at, e.profile)
-            val cmd = Command(closed.id, at.toEpochMilli(), Device.WATCH)
+            val cmd = Command(closed.id, at.toEpochMilli(), Device.WATCH, stage = e.instance.currentStage)
             WatchScheduleStore.update(context, closed)
             WatchAlarmScheduler.cancelChannel(context, closed.alarmId)
             WakeStageService.remoteCommands.tryEmit(cmd)
