@@ -12,10 +12,12 @@ import java.time.Instant
  * The one place an occurrence's state changes on the phone. The device-protected snapshot is updated at once
  * (works before first unlock); Room, the next occurrence and the sleep log follow when the phone is unlocked,
  * or at BOOT_COMPLETED via [AlarmRepository.rescheduleAll]'s reconcile step.
+ *
+ * [stampWake] false when the caller already recorded the wake time (I'M UP records it once for all its targets).
  */
 object InstanceEvents {
 
-    fun record(context: Context, instance: AlarmInstance) {
+    fun record(context: Context, instance: AlarmInstance, stampWake: Boolean = true) {
         ScheduleStore.update(context, instance)
         if (!AppGraph.isUnlocked(context)) return
         val app = context.applicationContext as GoodApplication
@@ -24,7 +26,7 @@ object InstanceEvents {
             if (instance.alarmId > 0) repo.markInstance(instance)
             if (instance.state.isTerminal) {
                 // Only real alarms stamp a wake time; a CHK test alarm says nothing about sleep.
-                if (instance.state == InstanceState.DISMISSED && instance.alarmId > 0) {
+                if (stampWake && instance.state == InstanceState.DISMISSED && instance.alarmId > 0) {
                     AppGraph.sleep(app).onWake(Instant.ofEpochMilli(instance.dismissedAtEpochMs ?: System.currentTimeMillis()))
                 }
                 repo.rescheduleAll("instance ${instance.state}")

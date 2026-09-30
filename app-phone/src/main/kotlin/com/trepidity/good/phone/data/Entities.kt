@@ -67,15 +67,19 @@ data class InstanceEntity(
     val currentStage: String?,
     val dismissedAt: Long?,
     val dismissedOn: String?,
+    val firstStageAt: Long? = null,
+    val dismissedAtStage: String? = null,
 ) {
     fun toModel() = AlarmInstance(
         id, alarmId, scheduledAt, InstanceState.valueOf(state),
         currentStage?.let(StageType::valueOf), dismissedAt, dismissedOn?.let(Device::valueOf),
+        firstStageAt, dismissedAtStage?.let(StageType::valueOf),
     )
 
     companion object {
         fun of(i: AlarmInstance) = InstanceEntity(
             i.id, i.alarmId, i.scheduledAtEpochMs, i.state.name, i.currentStage?.name, i.dismissedAtEpochMs, i.dismissedOn?.name,
+            i.firstStageAtEpochMs, i.dismissedAtStage?.name,
         )
     }
 }

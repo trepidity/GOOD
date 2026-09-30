@@ -30,7 +30,7 @@ class PhoneListenerService : WearableListenerService() {
     override fun onMessageReceived(event: MessageEvent) {
         Log.i(TAG, "Message ${event.path}")
         when (event.path) {
-            DataLayerPaths.CMD_DISMISS -> runCatching { SyncCodec.decodeCommand(event.data) }.getOrNull()?.let(::remoteDismiss)
+            DataLayerPaths.CMD_DISMISS -> runCatching { SyncCodec.decodeCommand(event.data) }.getOrNull()?.let(::remoteClose)
             DataLayerPaths.HEALTH_REPLY -> runCatching { SyncCodec.decodeAny<HealthReply>(event.data) }.getOrNull()
                 ?.let { PhoneSync.healthReplies.tryEmit(it) }
             DataLayerPaths.CMD_TOGGLE -> runCatching { SyncCodec.decodeAny<ToggleCommand>(event.data) }.getOrNull()?.let { cmd ->
@@ -52,20 +52,25 @@ class PhoneListenerService : WearableListenerService() {
             instanceIdFromStatePath(event.dataItem.uri.path) ?: continue
             val bytes = DataMapItem.fromDataItem(event.dataItem).dataMap.getByteArray(DataLayerPaths.KEY_PAYLOAD) ?: continue
             val cmd = runCatching { SyncCodec.decodeCommand(bytes) }.getOrNull() ?: continue
-            if (cmd.from == com.trepidity.good.model.Device.WATCH) remoteDismiss(cmd)
+            if (cmd.from == com.trepidity.good.model.Device.WATCH) remoteClose(cmd)
         }
     }
 
-    /** Idempotent: a dismiss for an occurrence that is already over changes nothing. */
-    private fun remoteDismiss(cmd: Command) {
+    /** Idempotent: a close (dismiss or cancel) for an occurrence that is already over changes nothing. */
+    private fun remoteClose(cmd: Command) {
         WakeService.remoteCommands.tryEmit(cmd)
         val entry = ScheduleStore.find(this, cmd.instanceId) ?: return
         if (entry.instance.state.isTerminal) return
-        EventLog.log(this, "DISMISS_REMOTE", "${cmd.instanceId} from ${cmd.from} after ${System.currentTimeMillis() - cmd.sentAtEpochMs} ms")
-        InstanceEvents.record(
-            this,
-            entry.instance.copy(state = InstanceState.DISMISSED, currentStage = null, dismissedAtEpochMs = cmd.sentAtEpochMs, dismissedOn = cmd.from),
-        )
+        EventLog.log(this, "DISMISS_REMOTE", "${cmd.instanceId} from ${cmd.from} as ${cmd.state} after ${System.currentTimeMillis() - cmd.sentAtEpochMs} ms")
+        val closed = if (cmd.state == InstanceState.DISMISSED) {
+            entry.instance.copy(
+                state = InstanceState.DISMISSED, currentStage = null, dismissedAtStage = entry.instance.currentStage,
+                dismissedAtEpochMs = cmd.sentAtEpochMs, dismissedOn = cmd.from,
+            )
+        } else {
+            entry.instance.copy(state = cmd.state, currentStage = null)
+        }
+        InstanceEvents.record(this, closed)
     }
 
     private fun background(block: suspend () -> Unit) {

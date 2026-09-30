@@ -1,6 +1,7 @@
 package com.trepidity.good.phone.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -14,7 +15,8 @@ import androidx.room.RoomDatabase
         AlarmEntity::class, ProfileEntity::class, InstanceEntity::class, SleepSessionEntity::class,
         SleepSegmentEntity::class, SleepSignalEntity::class, AnchorEntity::class, EventLogEntity::class,
     ],
-    version = 1,
+    version = 2,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
     exportSchema = true,
 )
 abstract class GoodDatabase : RoomDatabase() {

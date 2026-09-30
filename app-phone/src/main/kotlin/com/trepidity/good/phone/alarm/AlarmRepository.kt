@@ -3,22 +3,27 @@ package com.trepidity.good.phone.alarm
 import android.content.Context
 import com.trepidity.good.model.Alarm
 import com.trepidity.good.model.AlarmInstance
+import com.trepidity.good.model.Command
+import com.trepidity.good.model.Device
 import com.trepidity.good.model.InstanceState
 import com.trepidity.good.model.ScheduleEntry
 import com.trepidity.good.model.ScheduleSnapshot
 import com.trepidity.good.model.WakeProfile
 import com.trepidity.good.phone.AppGraph
 import com.trepidity.good.phone.EventLog
+import com.trepidity.good.phone.GoodApplication
 import com.trepidity.good.phone.data.AlarmEntity
 import com.trepidity.good.phone.data.GoodDatabase
 import com.trepidity.good.phone.data.InstanceEntity
 import com.trepidity.good.phone.data.ProfileEntity
 import com.trepidity.good.phone.sleep.BedtimeReminderScheduler
 import com.trepidity.good.phone.sync.PhoneSync
+import com.trepidity.good.phone.wake.WakeService
 import com.trepidity.good.wake.Channel
 import com.trepidity.good.wake.ScheduleBuilder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -59,14 +64,16 @@ class AlarmRepository(private val context: Context, private val db: GoodDatabase
     }
 
     /**
-     * Persists an occurrence's state. The first transition into a terminal state disarms a one-shot alarm
+     * Persists an occurrence's state. The first DISMISSED or SILENCED transition disarms a one-shot alarm
      * (REVIEW R5); later duplicates (e.g. the dismiss message and the state item both arriving) are ignored.
      */
     suspend fun markInstance(instance: AlarmInstance) {
         val previous = db.instances().get(instance.id)?.toModel()
         if (previous != null && previous.state.isTerminal) return
         db.instances().upsert(InstanceEntity.of(instance))
-        if (instance.state.isTerminal && instance.alarmId > 0) {
+        // Only an occurrence that rang (or was dismissed) uses up a one-shot. SKIPPED and CANCELLED don't:
+        // editing a one-shot's time cancels its old occurrence and must leave the channel armed.
+        if ((instance.state == InstanceState.DISMISSED || instance.state == InstanceState.SILENCED) && instance.alarmId > 0) {
             val alarm = db.alarms().get(instance.alarmId)?.toModel()
             if (alarm != null && alarm.repeatDays == 0 && alarm.enabled) db.alarms().upsert(AlarmEntity.of(alarm.copy(enabled = false)))
         }
@@ -86,11 +93,20 @@ class AlarmRepository(private val context: Context, private val db: GoodDatabase
 
         for (alarm in db.alarms().all().map { it.toModel() }) {
             val profile = profiles[alarm.profileId] ?: WakeProfile.GENTLE
-            val last = db.instances().latest(alarm.id)?.toModel()
+            val last = ScheduleBuilder.current(db.instances().recent(alarm.id).map { it.toModel() })
             val decision = ScheduleBuilder.decide(Channel(alarm, profile, last), now, zone)
             decision.missed?.let {
                 markInstance(it)
                 EventLog.log(context, "MISSED", "${it.id} never dismissed; closed as silenced")
+            }
+            decision.skipped?.let {
+                markInstance(it)
+                EventLog.log(context, "SKIPPED", it.id)
+            }
+            decision.cancelled?.let {
+                markInstance(it)
+                EventLog.log(context, "CANCELLED", "${it.id} (was ${last?.state})")
+                if (last?.state == InstanceState.FIRING) closeRunning(it, now)
             }
             val active = decision.active
             if (active == null) {
@@ -124,6 +140,25 @@ class AlarmRepository(private val context: Context, private val db: GoodDatabase
         BedtimeReminderScheduler.update(context, snapshot)
         AppGraph.sleep(context).ensureSleepApi()
         snapshot
+    }
+
+    /** A ringing occurrence whose channel was disarmed or moved (#6): stop it here and on the watch. */
+    private fun closeRunning(instance: AlarmInstance, now: Instant) {
+        ScheduleStore.update(context, instance)
+        val cmd = Command(instance.id, now.toEpochMilli(), Device.PHONE, InstanceState.CANCELLED)
+        WakeService.remoteCommands.tryEmit(cmd)
+        (context.applicationContext as GoodApplication).appScope.launch {
+            runCatching { PhoneSync.sendDismiss(context, instance, cmd) }
+                .onFailure { EventLog.log(context, "PUSH_FAILED", "close ${instance.id}: ${it.message}") }
+        }
+    }
+
+    /** SKIP (hold ▼): skip the occurrence on [date] (ISO local date), or clear a pending skip with null. */
+    suspend fun setSkip(channel: Long, date: String?) {
+        val a = db.alarms().get(channel)?.toModel() ?: return
+        db.alarms().upsert(AlarmEntity.of(a.copy(skipNextDate = date)))
+        EventLog.log(context, if (date != null) "SKIP" else "UNSKIP", "AL$channel ${date ?: a.skipNextDate}")
+        rescheduleAll(if (date != null) "skip" else "unskip")
     }
 
     /**

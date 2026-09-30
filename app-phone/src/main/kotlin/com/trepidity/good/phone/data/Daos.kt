@@ -28,8 +28,11 @@ interface ProfileDao {
 @Dao
 interface InstanceDao {
     @Query("SELECT * FROM alarm_instance WHERE id = :id") suspend fun get(id: String): InstanceEntity?
-    @Query("SELECT * FROM alarm_instance WHERE alarmId = :alarmId ORDER BY scheduledAt DESC LIMIT 1")
-    suspend fun latest(alarmId: Long): InstanceEntity?
+    /** The channel's most recent rows by alarm time; [ScheduleBuilder.current] picks the current one from them. */
+    @Query("SELECT * FROM alarm_instance WHERE alarmId = :alarmId ORDER BY scheduledAt DESC LIMIT :limit")
+    suspend fun recent(alarmId: Long, limit: Int = 16): List<InstanceEntity>
+    @Query("SELECT * FROM alarm_instance WHERE scheduledAt BETWEEN :from AND :to ORDER BY scheduledAt")
+    suspend fun between(from: Long, to: Long): List<InstanceEntity>
     @Query("SELECT * FROM alarm_instance WHERE scheduledAt >= :from ORDER BY scheduledAt")
     suspend fun since(from: Long): List<InstanceEntity>
     @Query("SELECT * FROM alarm_instance ORDER BY scheduledAt") suspend fun all(): List<InstanceEntity>
