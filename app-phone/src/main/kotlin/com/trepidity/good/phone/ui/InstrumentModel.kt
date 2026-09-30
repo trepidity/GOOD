@@ -141,6 +141,7 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(snapshot = ScheduleStore.load(ctx)) }
         runChecks()
         refreshSleepAction()
+        refreshWakeLines()
     }
 
     // ---- The five case buttons --------------------------------------------------------------------------
@@ -249,6 +250,7 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             alarmsRepo.setSkip(channel, date)
             refreshSnapshot()
+            loadWakeLines()
             banner(text)
         }
     }
@@ -276,6 +278,7 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
                 if (sleepRepo.nextAction(now) == SleepAction.UP) {
                     WakeUp.record(ctx, now)
                     refreshSnapshot()
+                    loadWakeLines()
                     banner("GOOD MORNING")
                 } else {
                     prefs.lastBedtime = now.toEpochMilli()
@@ -296,6 +299,10 @@ class InstrumentModel(app: Application) : AndroidViewModel(app) {
 
     /** Wake date (ISO) → the SLP lap's wake line ("WOKE SND +6", "UP EARLY", …) for the last 31 nights (#7). */
     val wakeLines = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    private fun refreshWakeLines() {
+        viewModelScope.launch(Dispatchers.IO) { loadWakeLines() }
+    }
 
     private suspend fun loadWakeLines() {
         val zone = ZoneId.systemDefault()
