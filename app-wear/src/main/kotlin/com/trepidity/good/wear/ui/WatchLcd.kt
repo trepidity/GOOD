@@ -41,6 +41,9 @@ private const val LINE = 0.064f
 private const val SMALL = 0.054f
 private const val ICON = 0.07f
 
+/** Air between a mode's rows, so the label and the lines below don't touch the big digits. */
+private const val ROW_GAP = 0.02f
+
 /** Top band of the face: a tap there is the LIGHT button (GLOW), not ▲. */
 const val TAB_BAND = 0.27f
 
@@ -93,7 +96,7 @@ fun Slots(
     line: @Composable RowScope.(Dp) -> Unit,
     small: @Composable RowScope.(Dp) -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(s * ROW_GAP)) {
         SlotRow(s, TITLE, title)
         SlotRow(s, BIG, big)
         SlotRow(s, LINE, line)

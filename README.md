@@ -63,7 +63,7 @@ Real screenshots of the built app on emulators (Android 16 phone, Wear OS 5 roun
 <table>
 <tr>
 <td><img src="docs/screenshots/watch/01-alm.jpg" width="150" alt="Watch ALM"></td>
-<td><img src="docs/screenshots/watch/02-slp.jpg" width="150" alt="Watch SLP, 7:42 from OHealth"></td>
+<td><img src="docs/screenshots/watch/02-slp.jpg" width="150" alt="Watch SLP, last night 11:52–5:27"></td>
 <td><img src="docs/screenshots/watch/03-pro.jpg" width="150" alt="Watch PRO"></td>
 <td><img src="docs/screenshots/watch/04-pro-int1.jpg" width="150" alt="Watch PRO, INT 1 light 10:00"></td>
 </tr>
